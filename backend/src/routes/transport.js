@@ -239,7 +239,8 @@ async function lockTruckRow(tx, truckId) {
 router.post(
   '/trucks',
   authenticate,
-  requireRole('TRUCK_OWNER'),
+  // FIXED: Any authenticated user can register a truck. Buyers and sellers
+  // who want to use their own vehicle must register it on the platform first.
   [
     body('registration').isString().trim().notEmpty(),
     body('truckType').isString().trim().notEmpty(),
@@ -277,7 +278,7 @@ router.post(
 router.get(
   '/trucks/mine',
   authenticate,
-  requireRole('TRUCK_OWNER'),
+  // FIXED: Any authenticated user can list their own trucks.
   async (req, res) => {
     try {
       const trucks = await prisma.truck.findMany({
@@ -296,7 +297,7 @@ router.get(
 router.patch(
   '/trucks/:id/availability',
   authenticate,
-  requireRole('TRUCK_OWNER'),
+  // FIXED: Any authenticated user can manage their own truck's availability.
   [
     param('id').isUUID(),
     body('availability').isIn(['AVAILABLE', 'BUSY', 'OFFLINE']),
