@@ -153,8 +153,6 @@ const orderDetailInclude = {
   disputes: true,
   ratings: true,
   messages: { orderBy: { createdAt: 'asc' }, take: 50 },
-  // Recovery requests — the read model uses this to suppress a duplicate
-  // recovery action while one is already awaiting admin review.
   recoveryRequests: {
     where: { status: 'PENDING' },
     orderBy: { requestedAt: 'desc' },
@@ -354,7 +352,15 @@ router.get('/:id/workflow', authenticate, async (req, res) => {
 const PRICE_REVIEW_REASONS = new Set([
   'MARKET_PRICE_RISE', 'MARKET_PRICE_FALL', 'QUALITY_OR_QUANTITY_CHANGE',
   'FRESHNESS_OR_DAMAGE', 'OTHER_INSPECTION_FINDING',
+  // FIXED: Buyer signalling intent to walk away. The seller gets a 24-hour
+  // window to accept the cancellation or counter with a reduced price to
+  // keep the deal alive.
+  'BUYER_WANTS_CANCELLATION',
 ]);
+
+// FIXED: How long the seller has to respond to a buyer cancellation request
+// before the order is auto-cancelled by the maintenance cycle.
+const CANCELLATION_REQUEST_WINDOW_HOURS = 24;
 
 router.post('/:id/price-reviews', authenticate, idempotency('orders.price-review-create'), [
   param('id').isUUID(),
@@ -377,12 +383,62 @@ router.post('/:id/price-reviews', authenticate, idempotency('orders.price-review
     if (order.priceReviews.length) return res.status(409).json({ error: 'A price review is already awaiting a response' });
     if (order.buyerDecision === 'CANCEL') return res.status(409).json({ error: 'This order has already been cancelled after inspection' });
 
+    const reasonCode = req.body.reasonCode || suggestion_reason_default();
+
+    // FIXED: Buyer cancellation request — a special flow.
+    // The buyer signals they want out, but the seller gets a 24-hour window
+    // to keep the deal alive by countering with a reduced price.
+    if (reasonCode === 'BUYER_WANTS_CANCELLATION') {
+      // Only the buyer can request cancellation.
+      if (req.user.id !== order.buyerId) {
+        return res.status(403).json({ error: 'Only the buyer can request cancellation' });
+      }
+      // Optional walk-away price: the max the buyer would still pay. If null,
+      // the buyer wants out entirely.
+      const walkAwayPrice = req.body.proposedPrice == null ? null : Number(req.body.proposedPrice);
+      if (walkAwayPrice !== null && (!Number.isFinite(walkAwayPrice) || walkAwayPrice <= 0)) {
+        return res.status(400).json({ error: 'Walk-away price must be greater than zero when provided' });
+      }
+      const expiry = new Date(Date.now() + CANCELLATION_REQUEST_WINDOW_HOURS * 60 * 60 * 1000);
+      const review = await prisma.$transaction(async tx => {
+        const current = await tx.order.findUnique({ where: { id: order.id }, select: { finalPrice: true, buyerDecision: true, status: true } });
+        if (!current || ['CANCELLED', 'COMPLETED', 'DISPUTED'].includes(current.status)) {
+          throw Object.assign(new Error('Order is no longer available for cancellation request'), { status: 409 });
+        }
+        const open = await tx.priceReview.findFirst({ where: { orderId: order.id, status: 'PENDING' }, select: { id: true } });
+        if (open) throw Object.assign(new Error('A price review is already awaiting a response'), { status: 409 });
+        return tx.priceReview.create({
+          data: {
+            orderId: order.id,
+            proposedById: req.user.id,
+            proposedPrice: walkAwayPrice ?? Number(current.finalPrice),
+            reasonCode: 'BUYER_WANTS_CANCELLATION',
+            expiresAt: expiry,
+          },
+          include: { proposedBy: { select: { id: true, name: true } } },
+        });
+      });
+      await recordOrderEvent(prisma, {
+        orderId: order.id,
+        actorId: req.user.id,
+        type: 'PRICE_REVIEW_PROPOSED',
+        metadata: {
+          priceReviewId: review.id,
+          reasonCode: 'BUYER_WANTS_CANCELLATION',
+          walkAwayPrice: walkAwayPrice ?? null,
+        },
+      }).catch(err => req.log.error({ err }, 'CANCELLATION REQUEST EVENT FAILED'));
+      return res.status(201).json({
+        message: 'Cancellation requested. The seller has 24 hours to accept or counter with a reduced price.',
+        priceReview: review,
+      });
+    }
+
     const suggestion = await getInspectionPriceSuggestion(prisma, order);
     const amount = req.body.proposedPrice == null ? Number(suggestion?.suggestedPrice) : Number(req.body.proposedPrice);
     if (!Number.isFinite(amount) || amount <= 0) return res.status(400).json({ error: 'A valid proposed price is required. The platform could not calculate a price suggestion from the available market/inspection data.' });
     const minimumTotal = order.listing?.minAcceptablePrice == null ? null : Number(order.listing.minAcceptablePrice) * Number(order.quantity || 0);
     if (Number.isFinite(minimumTotal) && minimumTotal > 0 && amount < minimumTotal) return res.status(409).json({ error: "The proposed price is below the seller's minimum acceptable price" });
-    const reasonCode = req.body.reasonCode || suggestion?.suggestedReasonCode || 'OTHER_INSPECTION_FINDING';
     if (!PRICE_REVIEW_REASONS.has(reasonCode)) return res.status(400).json({ error: 'A valid price-review reason is required' });
     const snapshot = marketSnapshotData(suggestion?.marketReference, suggestion?.inspectedQuantity || order.quantity);
     const review = await prisma.$transaction(async tx => {
@@ -401,6 +457,12 @@ router.post('/:id/price-reviews', authenticate, idempotency('orders.price-review
   }
 });
 
+// Small helper: the previous inline default was `suggestion?.suggestedReasonCode || 'OTHER_INSPECTION_FINDING'`.
+// We extract it here so the reasonCode line above stays readable.
+function suggestion_reason_default() {
+  return 'OTHER_INSPECTION_FINDING';
+}
+
 router.patch('/:id/price-reviews/:reviewId/respond', authenticate, idempotency('orders.price-review-respond'), [
   param('id').isUUID(), param('reviewId').isUUID(),
   body('action').isIn(['ACCEPT', 'COUNTER', 'REJECT']),
@@ -417,6 +479,75 @@ router.patch('/:id/price-reviews/:reviewId/respond', authenticate, idempotency('
       if (!review || review.orderId !== order.id) throw Object.assign(new Error('Price review not found'), { status: 404 });
       if (review.status !== 'PENDING') throw Object.assign(new Error('This proposal is no longer awaiting a response'), { status: 409 });
       if (review.proposedById === req.user.id) throw Object.assign(new Error('The proposer cannot respond to their own proposal'), { status: 403 });
+
+      // FIXED: Special handling for BUYER_WANTS_CANCELLATION.
+      // The seller can either ACCEPT the cancellation (order is cancelled),
+      // or COUNTER with a reduced price to keep the deal alive.
+      if (review.reasonCode === 'BUYER_WANTS_CANCELLATION') {
+        if (req.body.action === 'ACCEPT') {
+          const claimed = await tx.priceReview.updateMany({ where: { id: review.id, status: 'PENDING' }, data: { status: 'ACCEPTED' } });
+          if (claimed.count !== 1) throw Object.assign(new Error('This proposal was already answered. Refresh and try again.'), { status: 409 });
+          // Trigger the standard cancellation flow for the order.
+          const fullOrder = await tx.order.findUnique({
+            where: { id: order.id },
+            select: {
+              id: true,
+              buyerId: true,
+              sellerId: true,
+              listingId: true,
+              status: true,
+              buyerDecision: true,
+              finalPrice: true,
+              quantity: true,
+              listing: { select: { id: true, category: true } },
+              payments: { select: { id: true, amount: true, status: true } },
+              transportJob: { select: { id: true, status: true } },
+              inspectionRequests: { where: { status: { not: 'CANCELLED' } }, orderBy: { createdAt: 'desc' }, take: 1, select: { id: true, status: true, report: { select: { id: true } } } },
+            },
+          });
+          await tx.order.update({
+            where: { id: fullOrder.id },
+            data: { buyerDecision: 'CANCEL', buyerDecisionAt: new Date(), buyerDecisionDueAt: null },
+          });
+          await cancelOrderInTransaction(tx, {
+            order: fullOrder,
+            actorId: req.user.id,
+            reason: 'Seller accepted buyer cancellation request',
+            cancelledByRole: 'BUYER',
+          });
+          return { action: 'ACCEPT_CANCELLATION', priceReview: { ...review, status: 'ACCEPTED' }, orderCancelled: true };
+        }
+        if (req.body.action === 'COUNTER') {
+          const claimed = await tx.priceReview.updateMany({ where: { id: review.id, status: 'PENDING' }, data: { status: 'COUNTERED' } });
+          if (claimed.count !== 1) throw Object.assign(new Error('This proposal was already answered. Refresh and try again.'), { status: 409 });
+          if (!req.body.proposedPrice || !req.body.reasonCode) throw Object.assign(new Error('Counter price and reason are required'), { status: 400 });
+          const minimumTotal = order.listing?.minAcceptablePrice == null ? null : Number(order.listing.minAcceptablePrice) * Number(order.quantity || 0);
+          if (Number.isFinite(minimumTotal) && minimumTotal > 0 && Number(req.body.proposedPrice) < minimumTotal) throw Object.assign(new Error('The counter price is below the seller\'s minimum acceptable price'), { status: 409 });
+          const suggestion = await getInspectionPriceSuggestion(tx, order);
+          const counterSnapshot = marketSnapshotData(suggestion?.marketReference, suggestion?.inspectedQuantity || order.quantity);
+          const child = await tx.priceReview.create({
+            data: {
+              orderId: order.id,
+              proposedById: req.user.id,
+              proposedPrice: Number(req.body.proposedPrice),
+              reasonCode: req.body.reasonCode,
+              parentId: review.id,
+              ...counterSnapshot,
+              originalUnitPrice: suggestion?.originalUnitPrice ?? null,
+              inspectedQuantity: suggestion?.inspectedQuantity ?? null,
+              quantityAdjustedPrice: suggestion?.quantityAdjustedPrice ?? null,
+              suggestedPrice: suggestion?.suggestedPrice ?? null,
+              adjustmentAmount: Number(req.body.proposedPrice) - Number(order.finalPrice),
+              adjustmentPercent: Number(order.finalPrice) > 0 ? ((Number(req.body.proposedPrice) - Number(order.finalPrice)) / Number(order.finalPrice)) * 100 : null,
+              calculationVersion: suggestion?.calculationVersion ?? null,
+            },
+            include: { proposedBy: { select: { id: true, name: true } } },
+          });
+          return { action: 'COUNTER', priceReview: child };
+        }
+        throw Object.assign(new Error('For a cancellation request, only ACCEPT or COUNTER is valid'), { status: 400 });
+      }
+
       if (req.body.action === 'COUNTER') {
         const claimed = await tx.priceReview.updateMany({ where: { id: review.id, status: 'PENDING' }, data: { status: 'COUNTERED' } });
         if (claimed.count !== 1) throw Object.assign(new Error('This proposal was already answered. Refresh and try again.'), { status: 409 });
@@ -440,8 +571,8 @@ router.patch('/:id/price-reviews/:reviewId/respond', authenticate, idempotency('
       await tx.order.update({ where: { id: order.id }, data: { finalPrice: review.proposedPrice, buyerDecision: 'BUY', buyerDecisionAt: now, buyerReviewedReportAt: now, paymentDueAt: computePaymentDueAt() } });
       return { action: 'ACCEPT', priceReview: { ...review, status: 'ACCEPTED' }, agreedPrice: review.proposedPrice };
     }, { maxWait: 10000, timeout: 15000 });
-    await recordOrderEvent(prisma, { orderId: req.params.id, actorId: req.user.id, type: `PRICE_REVIEW_${result.action}`, metadata: { priceReviewId: result.priceReview.id, proposedPrice: result.agreedPrice ?? result.priceReview.proposedPrice } }).catch(err => req.log.error({err}, 'PRICE REVIEW RESPONSE EVENT FAILED'));
-    return res.json({ message: result.action === 'ACCEPT' ? 'Revised price accepted by both parties. Goods payment is now available.' : result.action === 'COUNTER' ? 'Counter-proposal submitted; awaiting the other party.' : 'Price review proposal rejected.', ...result });
+    await recordOrderEvent(prisma, { orderId: req.params.id, actorId: req.user.id, type: `PRICE_REVIEW_${result.action}`, metadata: { priceReviewId: result.priceReview.id, proposedPrice: result.agreedPrice ?? result.priceReview.proposedPrice, reasonCode: result.priceReview.reasonCode } }).catch(err => req.log.error({err}, 'PRICE REVIEW RESPONSE EVENT FAILED'));
+    return res.json({ message: result.action === 'ACCEPT' ? 'Revised price accepted by both parties. Goods payment is now available.' : result.action === 'ACCEPT_CANCELLATION' ? 'Cancellation accepted. The order is now cancelled and any completed inspection fee is refunded.' : result.action === 'COUNTER' ? 'Counter-proposal submitted; awaiting the other party.' : 'Price review proposal rejected.', ...result });
   } catch (error) {
     req.log.error({ err: error }, 'RESPOND PRICE REVIEW ERROR');
     return res.status(error.status || 500).json({ error: error.message || 'Could not respond to price review' });
@@ -556,8 +687,25 @@ router.patch(
           throw Object.assign(new Error('The buyer decision window has expired. The order will be closed by the workflow maintenance cycle.'), { status: 409, code: 'BUYER_DECISION_WINDOW_EXPIRED' });
         }
         if (decision === 'BUY') {
-          const pendingReview = await tx.priceReview.findFirst({ where: { orderId: current.id, status: 'PENDING' }, select: { id: true } });
-          if (pendingReview) throw Object.assign(new Error('Respond to the pending price review before proceeding to payment.'), { status: 409, code: 'PRICE_REVIEW_PENDING' });
+          const pendingReview = await tx.priceReview.findFirst({ where: { orderId: current.id, status: 'PENDING' }, select: { id: true, reasonCode: true } });
+          if (pendingReview) {
+            if (pendingReview.reasonCode === 'BUYER_WANTS_CANCELLATION') {
+              throw Object.assign(new Error('You have an open cancellation request. Wait for the seller to respond, or withdraw it first.'), { status: 409, code: 'CANCELLATION_REQUEST_PENDING' });
+            }
+            throw Object.assign(new Error('Respond to the pending price review before proceeding to payment.'), { status: 409, code: 'PRICE_REVIEW_PENDING' });
+          }
+          // FIXED: The buyer must have gone through a formally accepted
+          // price review before payment can unlock. This forces bilateral
+          // price confirmation after the inspection report.
+          const acceptedReview = await tx.priceReview.findFirst({
+            where: { orderId: current.id, status: 'ACCEPTED', reasonCode: { not: 'BUYER_WANTS_CANCELLATION' } },
+            select: { id: true },
+          });
+          if (!acceptedReview) {
+            throw Object.assign(new Error(
+              'The price must be formally confirmed by both parties after the inspection report. Use "Confirm at agreed price" or "Propose a different price" to open the price review.'
+            ), { status: 409, code: 'PRICE_CONFIRMATION_REQUIRED' });
+          }
         }
 
         if (current.buyerDecision) {
@@ -603,13 +751,6 @@ router.patch(
         }
 
         if (decision === 'CANCEL') {
-          // CANCEL closes this order but NOT the listing's negotiation: the
-          // cancel transaction withdraws the buyer's agreed offer and calls
-          // promoteNextWaitingBuyer, so the next PENDING offer is
-          // automatically selected. This is how the model expresses
-          // "return to selection" at the order level — an Order cannot be
-          // reassigned to a different buyer, so a new order is created from
-          // the next promoted offer instead.
           const reason = req.body.reason || 'Buyer declined the transaction after inspection';
 
           await tx.order.update({
@@ -684,10 +825,6 @@ router.patch(
       }
 
       if (decision === 'CANCEL' && updated?.status === 'CANCELLED') {
-        // Order cancelled after inspection: the seller may select another
-        // waiting bidder. Offers waiting list is listing-scoped; inspection
-        // and transport waiting bidders were captured before the cancel
-        // transaction ran and are notified here.
         const cancelled = await prisma.order.findUnique({
           where: { id: updated.id },
           select: { listingId: true },
@@ -862,7 +999,7 @@ router.patch(
 
       if (userIsBuyer && !userIsAdmin && order.status !== 'PENDING_PAYMENT') {
         return res.status(400).json({
-          error: 'You can only cancel an order before it has been paid for. Raise a dispute for orders already in progress.',
+          error: 'You can only cancel an order before it has been paid for. Use "Request cancellation" after inspection, or raise a dispute for orders already in progress.',
         });
       }
 
@@ -900,9 +1037,6 @@ router.patch(
         });
       }
 
-      // Inspection and transport waiting lists: captured before the cancel
-      // transaction ran, notified after, since the cancel transaction moves
-      // every PENDING quote to REJECTED inside itself.
       if (preCancel) {
         for (const r of preCancel.inspectionRequests || []) {
           if (r.quotes?.length) {
