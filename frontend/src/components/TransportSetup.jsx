@@ -84,9 +84,15 @@ export default function TransportSetup({
 }) {
   const [method, setMethod] = useState(buyerOnlyCompetition ? 'HIRE_TRANSPORTER' : 'OWN_TRUCK');
   const [form, setForm] = useState({ ...emptyForm });
-  const pickupLocation = pickupDefault || '';
-  const destination = destinationDefault || '';
+
+  // FIXED: Pickup and destination are now local state so they can be typed
+  // in by the user when the order/listing doesn't provide them. Previously
+  // they were read-only constants from props, so a missing value blocked
+  // submission entirely.
+  const [pickupLocation, setPickupLocation] = useState(pickupDefault || '');
+  const [destination, setDestination] = useState(destinationDefault || '');
   const load = loadDefault || '';
+
   const [matches, setMatches] = useState([]);
   const [truck, setTruck] = useState('');
   const [ownTrucks, setOwnTrucks] = useState([]);
@@ -138,10 +144,11 @@ export default function TransportSetup({
       return;
     }
 
-    if (!pickupLocation || !destination || !load) {
-      setError('This order is missing a pickup location, destination or load. Update the listing or your profile location first.');
+    if (!pickupLocation.trim() || !destination.trim() || !load.trim()) {
+      setError('Provide the pickup location, destination and load before arranging transport.');
       return;
     }
+
     if (method === 'HIRE_TRANSPORTER' && !form.weight) {
       setError('Select the total weight.');
       return;
@@ -161,9 +168,9 @@ export default function TransportSetup({
         arrangingParty: party,
         method,
         truckId: method === 'OWN_TRUCK' ? truck : undefined,
-        pickupLocation,
-        destination,
-        load,
+        pickupLocation: pickupLocation.trim(),
+        destination: destination.trim(),
+        load: load.trim(),
         requiredCapacity: form.requiredCapacity ? Number(form.requiredCapacity) : undefined,
         specialRequirements: form.accessNotes.length ? form.accessNotes.join('; ') : undefined,
         workDetails: Object.keys(workDetails).length ? workDetails : undefined,
@@ -321,16 +328,52 @@ export default function TransportSetup({
         </header>
 
         <div className="od-form-grid">
-          <div className="od-tf od-tf-span">
-            <label>Route (from the order)</label>
-            <p className="ts-readonly">
-              {pickupLocation || 'Not set'} → {destination || 'Not set'}
-            </p>
+          {/* FIXED: Pickup and destination are now editable when the order
+              does not provide them. When the value is known from the order
+              or listing, it's shown read-only. */}
+          <div className="od-tf">
+            <label htmlFor="ts-pickup">Pickup location</label>
+            {pickupDefault ? (
+              <p className="ts-readonly">{pickupDefault}</p>
+            ) : (
+              <input
+                id="ts-pickup"
+                type="text"
+                className="field"
+                required
+                maxLength={120}
+                value={pickupLocation}
+                onChange={(e) => setPickupLocation(e.target.value)}
+                placeholder="e.g. Bahirdar"
+                disabled={submitting}
+              />
+            )}
           </div>
+
+          <div className="od-tf">
+            <label htmlFor="ts-destination">Destination</label>
+            {destinationDefault ? (
+              <p className="ts-readonly">{destinationDefault}</p>
+            ) : (
+              <input
+                id="ts-destination"
+                type="text"
+                className="field"
+                required
+                maxLength={120}
+                value={destination}
+                onChange={(e) => setDestination(e.target.value)}
+                placeholder="e.g. Addis Ababa"
+                disabled={submitting}
+              />
+            )}
+          </div>
+
           <div className="od-tf od-tf-span">
             <label>Load (from the listing)</label>
             <p className="ts-readonly">{load || 'Not set'}</p>
           </div>
+
           <div className="od-tf">
             <label htmlFor="ts-capacity">Minimum truck capacity</label>
             <select
