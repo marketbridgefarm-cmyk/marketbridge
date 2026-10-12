@@ -29,6 +29,13 @@ const emptyForm = {
   handling: [],
 };
 
+const emptyTruckForm = {
+  registration: '',
+  truckType: '',
+  capacity: '',
+  operatingArea: '',
+};
+
 const VEHICLE_TYPES = ['Pickup', 'Small truck', 'Medium truck', 'Large truck', 'Refrigerated truck', 'Flatbed'];
 const HANDLING_OPTIONS = [
   ['FRAGILE', 'Fragile'],
@@ -60,6 +67,13 @@ export default function TransportSetup({
   const [error, setError] = useState('');
   const [arrangingParty, setArrangingParty] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  // FIXED: Inline truck registration state. Buyers and sellers who want to
+  // use their own vehicle must register it on the platform first.
+  const [showTruckModal, setShowTruckModal] = useState(false);
+  const [truckForm, setTruckForm] = useState({ ...emptyTruckForm });
+  const [truckSubmitting, setTruckSubmitting] = useState(false);
+  const [truckError, setTruckError] = useState('');
 
   useEffect(() => {
     api
@@ -136,6 +150,50 @@ export default function TransportSetup({
     }
   };
 
+  // FIXED: Register a truck inline. After success, the new truck is
+  // immediately selected for this arrangement.
+  const registerTruck = async (event) => {
+    event.preventDefault();
+    setTruckError('');
+
+    if (!truckForm.registration.trim()) {
+      setTruckError('Registration plate is required.');
+      return;
+    }
+    if (!truckForm.truckType.trim()) {
+      setTruckError('Truck type is required.');
+      return;
+    }
+    if (!truckForm.capacity || Number(truckForm.capacity) <= 0) {
+      setTruckError('Enter a valid capacity (tons) greater than zero.');
+      return;
+    }
+
+    setTruckSubmitting(true);
+    try {
+      const res = await api.post('/transport/trucks', {
+        registration: truckForm.registration.trim(),
+        truckType: truckForm.truckType.trim(),
+        capacity: Number(truckForm.capacity),
+        operatingArea: truckForm.operatingArea.trim(),
+      });
+
+      const listRes = await api.get('/transport/trucks/mine');
+      setOwnTrucks(Array.isArray(listRes.data?.trucks) ? listRes.data.trucks : []);
+
+      if (res.data?.truck?.id) {
+        setTruck(res.data.truck.id);
+      }
+
+      setTruckForm({ ...emptyTruckForm });
+      setShowTruckModal(false);
+    } catch (err) {
+      setTruckError(err?.response?.data?.error || 'Could not register truck');
+    } finally {
+      setTruckSubmitting(false);
+    }
+  };
+
   const availableOwnTrucks = ownTrucks.filter((t) => t.availability === 'AVAILABLE');
 
   return (
@@ -196,19 +254,19 @@ export default function TransportSetup({
         </header>
 
         <div className="ts-choice-grid">
-          {!buyerOnlyCompetition && (
-            <button
-              type="button"
-              disabled={party === 'JOINT'}
-              className={`ts-choice${method === 'OWN_TRUCK' && party !== 'JOINT' ? ' is-selected' : ''}`}
-              onClick={() => setMethod('OWN_TRUCK')}
-            >
-              <span className="ts-choice-label">🚚 Use my own truck</span>
-              <span className="ts-choice-hint">
-                Record your own legally permitted vehicle. No transport-hiring commission.
-              </span>
-            </button>
-          )}
+          {/* FIXED: Own-truck button is now always shown — buyers and sellers
+              both have the option to use their own registered truck. */}
+          <button
+            type="button"
+            disabled={party === 'JOINT'}
+            className={`ts-choice${method === 'OWN_TRUCK' && party !== 'JOINT' ? ' is-selected' : ''}`}
+            onClick={() => setMethod('OWN_TRUCK')}
+          >
+            <span className="ts-choice-label">🚚 Use my own truck</span>
+            <span className="ts-choice-hint">
+              Record your own legally permitted vehicle. No transport-hiring commission.
+            </span>
+          </button>
 
           <button
             type="button"
@@ -396,8 +454,25 @@ export default function TransportSetup({
             ))}
           </div>
 
+          {/* FIXED: Show a register-a-truck CTA when the user has no available
+              trucks. This lets buyers and sellers register their own vehicle
+              inline without leaving the transport setup form. */}
           {!availableOwnTrucks.length && (
-            <p className="ts-lead">No available truck is registered to your account.</p>
+            <div className="ts-empty-trucks">
+              <p className="ts-lead">
+                No available truck is registered to your account.
+              </p>
+              <button
+                type="button"
+                className="od-chip"
+                onClick={() => {
+                  setTruckError('');
+                  setShowTruckModal(true);
+                }}
+              >
+                + Register a truck
+              </button>
+            </div>
           )}
         </section>
       )}
@@ -443,6 +518,122 @@ export default function TransportSetup({
               : 'Confirm own-truck arrangement'}
         </button>
       </div>
+
+      {/* ── Inline truck registration modal ─────────────── */}
+      {showTruckModal && (
+        <div
+          className="ts-truck-backdrop"
+          role="presentation"
+          onClick={() => !truckSubmitting && setShowTruckModal(false)}
+        >
+          <div
+            className="ts-truck-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="ts-truck-modal-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <header className="ts-truck-modal-head">
+              <h3 id="ts-truck-modal-title">Register a truck</h3>
+              <button
+                type="button"
+                className="od-chip"
+                aria-label="Close"
+                disabled={truckSubmitting}
+                onClick={() => setShowTruckModal(false)}
+              >
+                Close
+              </button>
+            </header>
+
+            <p className="ts-lead">
+              Once registered, your truck can be used for this delivery and
+              becomes available for other jobs on the platform.
+            </p>
+
+            {truckError && <div className="alert error ts-alert">{truckError}</div>}
+
+            <form onSubmit={registerTruck}>
+              <div className="od-form-grid">
+                <div className="od-tf">
+                  <label htmlFor="reg-plate">Registration plate</label>
+                  <input
+                    id="reg-plate"
+                    type="text"
+                    className="field"
+                    required
+                    value={truckForm.registration}
+                    onChange={(e) => setTruckForm({ ...truckForm, registration: e.target.value })}
+                    placeholder="e.g. ET-12345"
+                    disabled={truckSubmitting}
+                  />
+                </div>
+
+                <div className="od-tf">
+                  <label htmlFor="reg-type">Truck type</label>
+                  <input
+                    id="reg-type"
+                    type="text"
+                    className="field"
+                    required
+                    value={truckForm.truckType}
+                    onChange={(e) => setTruckForm({ ...truckForm, truckType: e.target.value })}
+                    placeholder="e.g. Flatbed, Isuzu, FSR"
+                    disabled={truckSubmitting}
+                  />
+                </div>
+
+                <div className="od-tf">
+                  <label htmlFor="reg-capacity">Capacity (tons)</label>
+                  <input
+                    id="reg-capacity"
+                    type="number"
+                    min="0.1"
+                    step="0.1"
+                    className="field"
+                    required
+                    value={truckForm.capacity}
+                    onChange={(e) => setTruckForm({ ...truckForm, capacity: e.target.value })}
+                    placeholder="e.g. 18"
+                    disabled={truckSubmitting}
+                  />
+                </div>
+
+                <div className="od-tf">
+                  <label htmlFor="reg-area">Operating area / routes</label>
+                  <input
+                    id="reg-area"
+                    type="text"
+                    className="field"
+                    value={truckForm.operatingArea}
+                    onChange={(e) => setTruckForm({ ...truckForm, operatingArea: e.target.value })}
+                    placeholder="e.g. Addis Ababa – Jimma"
+                    disabled={truckSubmitting}
+                  />
+                </div>
+              </div>
+
+              <div className="ts-truck-actions">
+                <button
+                  type="button"
+                  className="od-chip"
+                  disabled={truckSubmitting}
+                  onClick={() => setShowTruckModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={truckSubmitting}
+                >
+                  {truckSubmitting ? 'Registering…' : 'Register truck'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </form>
   );
 }
