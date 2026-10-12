@@ -551,6 +551,11 @@ router.get(
 
 // ============================================================================
 // CREATE TRANSPORT JOB
+// ----------------------------------------------------------------------------
+// FIXED: Transport is now gated on buyerDecision === 'BUY' (the buyer's
+// purchase commitment), not on the inspection report. What gets transported
+// is goods, not paperwork. Inspection safety is preserved upstream in the
+// buyer-decision endpoint.
 // ============================================================================
 
 router.post(
@@ -591,9 +596,9 @@ router.post(
         return res.status(403).json({ error: 'Not authorized to arrange transport for this order' });
       }
 
-      if (order.status !== 'CONFIRMED' && order.status !== 'PENDING_PAYMENT') {
+      if (order.status !== 'CONFIRMED' && order.status !== 'PENDING_PAYMENT' && order.status !== 'TRANSPORT_ARRANGED') {
         return res.status(400).json({
-          error: `Transport can only be arranged for orders in CONFIRMED or PENDING_PAYMENT state (current: ${order.status})`,
+          error: `Transport can only be arranged for orders in CONFIRMED, PENDING_PAYMENT, or TRANSPORT_ARRANGED state (current: ${order.status})`,
         });
       }
 
@@ -604,19 +609,14 @@ router.post(
       const isAgricultural = order.listing?.category === 'AGRICULTURAL';
       const isPhysicalGoods = ['AGRICULTURAL', 'PRODUCT'].includes(order.listing?.category);
 
-      if (isPhysicalGoods) {
-        const inspections = order.inspectionRequests || [];
-        const currentInspection = inspections
-          .filter((r) => r.status !== 'CANCELLED')
-          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
-        if (!currentInspection || currentInspection.status !== 'COMPLETED' || !currentInspection.report) {
-          return res.status(409).json({ code: 'INSPECTION_REPORT_REQUIRED', error: 'Complete and publish the inspection report before arranging transport.' });
-        }
-        const inspectionPaid = inspections.filter(r => r.fee != null && Number(r.fee) > 0)
-          .every(r => r.payments?.some(p => p.type === 'INSPECTOR' && p.status === 'PAID'));
-        if (!inspectionPaid) {
-          return res.status(409).json({ code: 'INSPECTION_PAYMENT_REQUIRED', error: 'All required inspection payments must be completed before arranging transport.' });
-        }
+      // FIXED: Transport is gated on the buyer's purchase decision, not on
+      // the inspection report. Once the buyer commits (BUY), the goods are
+      // contractually moving and transport can be arranged.
+      if (isPhysicalGoods && order.buyerDecision !== 'BUY') {
+        return res.status(409).json({
+          code: 'BUYER_DECISION_REQUIRED',
+          error: 'The buyer must decide to purchase before transport can be arranged.',
+        });
       }
 
       if (isAgricultural && order.listing.pickupWindowEnd) {
@@ -636,10 +636,6 @@ router.post(
           error: 'Physical-goods hired transport is buyer-controlled: registered truck owners submit competing quotes and the buyer selects and negotiates the transporter.',
         });
       }
-
-      // FIXED: Removed the OWN_TRUCK block that prevented physical-goods orders
-      // from using their own truck. Both buyer and seller can now arrange
-      // transport with their own vehicle for agricultural and product orders.
 
       if (!['SELLER', 'BUYER', 'JOINT'].includes(resolvedArrangingParty)) {
         return res.status(400).json({ error: 'arrangingParty must be SELLER, BUYER, or JOINT' });
@@ -1164,11 +1160,6 @@ async function checkLoadingReportGate(client, jobId) {
 
   const missing = [];
 
-  const goodsPaid = (job.order.payments || []).some(
-    (p) => p.type === 'MARKETPLACE' && p.status === 'PAID'
-  );
-  if (!goodsPaid) missing.push('MARKETPLACE');
-
   for (const r of job.order.inspectionRequests || []) {
     if (r.fee == null || Number(r.fee) <= 0) continue;
     const paid = (r.payments || []).some(
@@ -1247,18 +1238,13 @@ router.post('/:id/seller-confirm-pickup', authenticate, requireRole('SELLER'), [
     if (job.sellerPickupConfirmedAt) return res.status(409).json({ error: 'Pickup readiness was already confirmed' });
     const updated = await prisma.transportJob.updateMany({ where: { id: job.id, status: 'ACCEPTED', sellerPickupConfirmedAt: null }, data: { sellerPickupConfirmedAt: new Date(), sellerPickupMessage: req.body?.message || null, sellerPickupMessageAt: req.body?.message ? new Date() : null } });
     if (!updated.count) return res.status(409).json({ error: 'Transport status changed; refresh and try again' });
-    const decisionDueAt = computeBuyerDecisionDueAt();
-    await prisma.order.updateMany({
-      where: { id: job.orderId, buyerDecision: null, status: { notIn: ['CANCELLED', 'COMPLETED', 'DISPUTED'] } },
-      data: { buyerDecisionDueAt: decisionDueAt },
-    });
     await prisma.transportJob.updateMany({
       where: { id: job.id, status: 'ACCEPTED' },
       data: { sellerPreparationDueAt: null },
     });
     await recordAuditEvent(prisma, { actorId: req.user.id, action: 'TRANSPORT_SELLER_PICKUP_CONFIRMED', resourceType: 'TransportJob', resourceId: job.id, metadata: { orderId: job.orderId, message: req.body?.message || null } }).catch(() => {});
     await recordOrderEvent(prisma, { orderId: job.orderId, actorId: req.user.id, type: 'TRANSPORT_SELLER_PICKUP_CONFIRMED', metadata: { transportJobId: job.id, message: req.body?.message || null } }).catch(() => {});
-    return res.json({ message: 'Transporter preparation confirmed. The buyer may now make the final BUY decision and pay the seller.', sellerPickupConfirmedAt: new Date().toISOString(), buyerDecisionDueAt: decisionDueAt.toISOString() });
+    return res.json({ message: 'Transporter preparation confirmed. The transporter may now proceed with loading preparation.', sellerPickupConfirmedAt: new Date().toISOString() });
   } catch (error) {
     req.log.error({ err: error }, 'SELLER TRANSPORT PICKUP CONFIRM ERROR');
     return res.status(500).json({ error: 'Could not confirm transport pickup readiness' });
@@ -1322,7 +1308,7 @@ router.post('/:id/truck-arrived', authenticate, async (req, res) => {
     }).catch(() => {});
 
     return res.json({
-      message: 'Truck arrival confirmed. The buyer may now pay for transport.',
+      message: 'Truck arrival confirmed.',
       truckArrivedAt: now.toISOString(),
     });
   } catch (error) {
@@ -1347,14 +1333,17 @@ router.post(
       if (job.order.buyerId !== req.user.id && !isAdmin(req.user)) return res.status(403).json({ error: 'Only the buyer can confirm the loading report' });
       if (job.status !== 'ACCEPTED') return res.status(409).json({ error: 'Loading can only be confirmed while the transporter is accepted and waiting for loading' });
       if (!job.sellerPickupConfirmedAt) return res.status(409).json({ code: 'SELLER_TRANSPORT_PREPARATION_CONFIRMATION_REQUIRED', error: 'The seller must confirm transporter preparation first.' });
-      if (!job.truckArrivedAt) return res.status(409).json({ code: 'TRUCK_ARRIVAL_REQUIRED', error: 'The truck must be on site before loading can be confirmed.' });
+      if (!job.truckArrivedAt) return res.status(409).json({ code: 'TRUCK_ARRIVAL_REQUIRED', error: 'The truck must be on site before the loading report can be approved.' });
       const report = await prisma.transportLoadingReport.findUnique({ where: { transportJobId: job.id } });
-      if (!report) return res.status(409).json({ code: 'LOADING_REPORT_REQUIRED', error: 'The transporter must submit the loading report before loading can be confirmed.' });
-      if (job.order.buyerDecision !== 'BUY') return res.status(409).json({ code: 'BUYER_DECISION_REQUIRED', error: 'The buyer must make the final BUY decision before confirming loading.' });
-      const goodsPaid = await prisma.payment.findFirst({ where: { orderId: job.orderId, type: 'MARKETPLACE', status: 'PAID' }, select: { id: true } });
-      if (!goodsPaid) return res.status(409).json({ code: 'GOODS_PAYMENT_REQUIRED', error: 'The seller payment must be completed before loading.' });
+      if (!report) return res.status(409).json({ code: 'LOADING_REPORT_REQUIRED', error: 'The transporter must submit the loading report before it can be approved.' });
+      if (job.order.buyerDecision !== 'BUY') return res.status(409).json({ code: 'BUYER_DECISION_REQUIRED', error: 'The buyer must make the final BUY decision first.' });
+
+      // FIXED: The loading-prep report approval is what unlocks goods payment.
+      // Only the transport fee must be settled at this stage; goods payment
+      // is created HERE, after approval.
       const transportPaid = await prisma.payment.findFirst({ where: { transportJobId: job.id, type: 'TRANSPORT', status: 'PAID' }, select: { id: true } });
-      if (!transportPaid) return res.status(409).json({ code: 'TRANSPORT_PAYMENT_REQUIRED', error: 'The transporter must be paid before loading can be confirmed.' });
+      if (!transportPaid) return res.status(409).json({ code: 'TRANSPORT_PAYMENT_REQUIRED', error: 'The transporter must be paid before the loading report can be approved.' });
+
       const reviewAt = new Date();
       const updated = await prisma.$transaction(async (tx) => {
         const changed = await tx.transportJob.updateMany({ where: { id: job.id, status: 'ACCEPTED', buyerLoadingConfirmedAt: null }, data: { buyerLoadingConfirmedAt: reviewAt, buyerLoadingDueAt: null } });
@@ -1369,7 +1358,12 @@ router.post(
       if (!updated) return res.status(409).json({ error: 'Loading confirmation changed; refresh and try again.' });
       await recordAuditEvent(prisma, { actorId: req.user.id, action: 'TRANSPORT_LOADING_CONFIRMED_BY_BUYER', resourceType: 'TransportJob', resourceId: job.id, metadata: { orderId: job.orderId, loadingReportId: report.id } }).catch(() => {});
       await recordOrderEvent(prisma, { orderId: job.orderId, actorId: req.user.id, type: 'TRANSPORT_LOADING_CONFIRMED_BY_BUYER', metadata: { transportJobId: job.id, loadingReportId: report.id } }).catch(() => {});
-      return res.json({ message: 'Loading report approved. The transporter may now load and pick up the goods.', buyerLoadingConfirmedAt: new Date().toISOString() });
+
+      // FIXED: The approval of the loading-prep report is the event that
+      // creates the goods payment obligation.
+      await syncOrderPaymentObligations(prisma, job.orderId).catch(() => {});
+
+      return res.json({ message: 'Loading report approved. Goods payment is now unlocked. The transporter may proceed with loading once the seller payment is settled.', buyerLoadingConfirmedAt: new Date().toISOString() });
     } catch (error) {
       req.log.error({ err: error }, 'BUYER LOADING CONFIRM ERROR');
       return res.status(500).json({ error: 'Could not confirm the loading report' });
@@ -1426,11 +1420,18 @@ router.patch(
           return res.status(409).json({ code: 'SELLER_PICKUP_CONFIRMATION_REQUIRED', error: 'The seller must confirm goods are prepared for loading.' });
         }
         if (!job.truckArrivedAt) {
-          return res.status(409).json({ code: 'TRUCK_ARRIVAL_REQUIRED', error: 'The truck must be on site before loading begins.' });
+          return res.status(409).json({ code: 'TRUCK_ARRIVAL_REQUIRED', error: 'The truck must be on site before pickup can be recorded.' });
         }
         const loadingReport = await prisma.transportLoadingReport.findUnique({ where: { transportJobId: job.id }, select: { id: true } });
-        if (!loadingReport) return res.status(409).json({ code: 'LOADING_REPORT_REQUIRED', error: 'The transporter must submit the loading report before physical loading begins.' });
-        if (!job.buyerLoadingConfirmedAt) return res.status(409).json({ code: 'BUYER_LOADING_CONFIRMATION_REQUIRED', error: 'The buyer must review and confirm the loading report before loading begins.' });
+        if (!loadingReport) return res.status(409).json({ code: 'LOADING_REPORT_REQUIRED', error: 'The transporter must submit the loading report before pickup.' });
+        if (!job.buyerLoadingConfirmedAt) return res.status(409).json({ code: 'BUYER_LOADING_CONFIRMATION_REQUIRED', error: 'The buyer must review and approve the loading report before pickup.' });
+
+        // FIXED: PICKUP means "loaded and awaiting goods payment". The buyer
+        // must settle the seller before the truck can be marked as loaded.
+        const goodsPaid = await prisma.payment.findFirst({ where: { orderId: job.orderId, type: 'MARKETPLACE', status: 'PAID' }, select: { id: true } });
+        if (!goodsPaid) {
+          return res.status(409).json({ code: 'GOODS_PAYMENT_REQUIRED', error: 'The buyer must pay for the goods before the truck can be marked as loaded.' });
+        }
       }
 
       if (job.method === 'HIRE_TRANSPORTER' && next === 'ACCEPTED') {
@@ -1603,7 +1604,6 @@ router.patch(
         });
       }
 
-      // FIXED: Release waiting transporters if the transport job is cancelled
       if (next === 'CANCELLED') {
         await releaseWaitingTransporters(prisma, {
           transportJobId: job.id,
@@ -2143,7 +2143,7 @@ router.patch(
         return updatedQuote;
       }, { maxWait: 10000, timeout: 15000 });
 
-      return res.json({ message: 'Transport quote agreed. Payment is not yet due; seller preparation and the loading-report approval workflow must complete first.', commercialStatus: 'AGREED_UNPAID', quote: result });
+      return res.json({ message: 'Transport quote agreed. The transport fee is now payable.', commercialStatus: 'AGREED_PAYABLE', quote: result });
     } catch (error) {
       req.log.error({ err: error }, 'ACCEPT TRANSPORT QUOTE ERROR:');
 
@@ -2816,9 +2816,9 @@ router.post(
         return res.status(400).json({ error: 'loadingStartedAt cannot be later than loadingFinishedAt' });
       }
 
-      const goodsPaid = await prisma.payment.findFirst({ where: { orderId: job.orderId, type: 'MARKETPLACE', status: 'PAID' }, select: { id: true } });
-      if (!goodsPaid) return res.status(409).json({ code: 'GOODS_PAYMENT_REQUIRED', error: 'The seller payment must be completed before the loading report can be submitted.' });
-
+      // FIXED: The loading-prep report comes BEFORE goods payment. Its
+      // approval is what unlocks goods payment. Only the transport fee must
+      // be settled at this point.
       const transportPaid = await prisma.payment.findFirst({ where: { transportJobId: job.id, type: 'TRANSPORT', status: 'PAID' }, select: { id: true } });
       if (!transportPaid) return res.status(409).json({ code: 'TRANSPORT_PAYMENT_REQUIRED', error: 'The transporter must be paid before the loading report can be submitted.' });
 
