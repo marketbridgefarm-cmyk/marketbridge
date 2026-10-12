@@ -6,10 +6,8 @@
 const QUANTITY_VALUES = [50, 100, 250, 500, 1000, 2500, 5000, 10000];
 const QUANTITY_UNITS = ['kg', 'tons', 'quintals', 'units', 'crates', 'bags'];
 
-// FIXED: Sequential series instead of geometric jumps.
-// Small loads get fine granularity; bulk loads step in practical truck sizes.
+// FIXED: Strict sequence — every step is +1, no jumps.
 const WEIGHT_OPTIONS = [
-  '500 kg',
   '1 ton',
   '2 tons',
   '3 tons',
@@ -18,26 +16,34 @@ const WEIGHT_OPTIONS = [
   '6 tons',
   '7 tons',
   '8 tons',
+  '9 tons',
   '10 tons',
+  '11 tons',
   '12 tons',
+  '13 tons',
+  '14 tons',
   '15 tons',
+  '16 tons',
+  '17 tons',
+  '18 tons',
+  '19 tons',
   '20 tons',
 ];
 
-// FIXED: Sequential 1–10, then practical lot sizes.
+// FIXED: Strict sequence — every step is +1, no jumps.
 const PACKAGE_COUNTS = [
-  1, 2, 3, 4, 5,
-  6, 7, 8, 9, 10,
-  12, 15, 20, 25, 30,
-  40, 50, 75, 100,
+  1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+  11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+  21, 22, 23, 24, 25, 26, 27, 28, 29, 30,
+  31, 32, 33, 34, 35, 36, 37, 38, 39, 40,
+  41, 42, 43, 44, 45, 46, 47, 48, 49, 50,
 ];
 
-// FIXED: Sequential 1–10, then common truck capacities.
+// FIXED: Strict sequence — every step is +1, no jumps.
 // TransportSetup.jsx renders each as "{t} t or more".
 const CAPACITY_TONS = [
-  1, 2, 3, 4, 5,
-  6, 7, 8, 9, 10,
-  12, 15, 20,
+  1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+  11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
 ];
 
 const ACCESS_NOTES = [
