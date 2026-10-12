@@ -456,7 +456,13 @@ if (req.user.id === order.buyerId && amount > Number(order.finalPrice)) {
       if (!current || ['CANCELLED', 'COMPLETED', 'DISPUTED'].includes(current.status)) throw Object.assign(new Error('Order is no longer available for price review'), { status: 409 });
       const open = await tx.priceReview.findFirst({ where: { orderId: order.id, status: 'PENDING' }, select: { id: true } });
       if (open) throw Object.assign(new Error('A price review is already awaiting a response'), { status: 409 });
-      if (Number(current.finalPrice) === amount) throw Object.assign(new Error('The proposed price must differ from the current agreed price'), { status: 400 });
+      // FIXED: Allow the buyer to confirm the current price by proposing it
+// unchanged. The buyer's "Confirm at agreed price" button proposes the
+// exact finalPrice, and this must be accepted. Only the seller is blocked
+// from re-proposing the same price to prevent negotiation loops.
+if (Number(current.finalPrice) === amount && req.user.id !== order.buyerId) {
+  throw Object.assign(new Error('The proposed price must differ from the current agreed price'), { status: 400 });
+}
       return tx.priceReview.create({ data: { orderId: order.id, proposedById: req.user.id, proposedPrice: amount, reasonCode, ...snapshot, originalUnitPrice: suggestion?.originalUnitPrice ?? null, inspectedQuantity: suggestion?.inspectedQuantity ?? null, quantityAdjustedPrice: suggestion?.quantityAdjustedPrice ?? null, suggestedPrice: suggestion?.suggestedPrice ?? null, adjustmentAmount: suggestion?.adjustmentAmount ?? null, adjustmentPercent: suggestion?.adjustmentPercent ?? null, calculationVersion: suggestion?.calculationVersion ?? null }, include: { proposedBy: { select: { id: true, name: true } } } });
     });
     await recordOrderEvent(prisma, { orderId: order.id, actorId: req.user.id, type: 'PRICE_REVIEW_PROPOSED', metadata: { priceReviewId: review.id, proposedPrice: amount, reasonCode: review.reasonCode } }).catch(err => req.log.error({err}, 'PRICE REVIEW EVENT FAILED'));
