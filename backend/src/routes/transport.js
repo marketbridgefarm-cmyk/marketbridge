@@ -21,7 +21,12 @@ const { evidenceUpload, uploadEvidenceFiles } = require('../utils/evidenceUpload
 const { buildBuyerReportEnvelope } = require('../utils/reportContract');
 const { idempotency } = require('../middleware/idempotency');
 const { matchTrucks } = require('../services/transportMatchingService');
-const { computeSellerPreparationDueAt, computeBuyerDecisionDueAt, computeBuyerLoadingDueAt } = require('../utils/orderTiming');
+
+const {
+  computeSellerTransportPreparationDueAt: computeSellerPreparationDueAt,
+  computeBuyerDecisionDueAt,
+  computeLoadingApprovalDueAt: computeBuyerLoadingDueAt,
+} = require('../utils/orderTiming');
 const {
   AMOUNT_LIMITS,
   validAmount,
