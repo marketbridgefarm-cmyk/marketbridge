@@ -105,6 +105,26 @@ function jobProgress(status) {
   }));
 }
 
+// ENHANCEMENT: Helper to determine the exact next step for the inspector
+function getNextStep(r) {
+  if (r.status === 'COMPLETED') {
+    return { text: 'Inspection complete. Report has been submitted.', tone: 'success' };
+  }
+  if (r.status === 'ACCEPTED') {
+    if (!r.sellerConfirmedAt) {
+      return { text: 'Waiting for the seller to confirm your fee and agreed terms.', tone: 'wait' };
+    }
+    if (!r.inspectorOnSiteConfirmedAt) {
+      return { text: 'Waiting for the seller to confirm your arrival on site.', tone: 'wait' };
+    }
+    return { text: 'Seller confirmed everything. You can start the inspection now.', tone: 'info' };
+  }
+  if (r.status === 'IN_PROGRESS') {
+    return { text: 'Inspection in progress. Complete your findings and submit the report.', tone: 'info' };
+  }
+  return { text: 'Review the job details and proceed.', tone: 'neutral' };
+}
+
 function jobAmount(request) {
   const accepted = (request.quotes || []).find((q) => q.status === 'ACCEPTED');
   const raw = request.fee ?? accepted?.counterAmount ?? accepted?.amount ?? null;
@@ -139,8 +159,6 @@ function AmountRow({ value, unit = 'ETB' }) {
   );
 }
 
-/* Inline "Label: Value" row used on job cards.
-   Items stack one per line inside the card body. */
 function InlineMeta({ items }) {
   const visible = (items || []).filter(Boolean);
   if (!visible.length) return null;
@@ -857,6 +875,7 @@ export default function InspectorDashboard() {
                         const orderId = r.listing?.orders?.[0]?.id;
                         const orderRef = shortOrder(orderId);
                         const amount = jobAmount(r);
+                        const nextStep = getNextStep(r); // ENHANCEMENT: Determine the next step
 
                         const acceptedQuote = (r.quotes || []).find((q) => q.status === 'ACCEPTED');
                         const paid = (r.payments || []).some(
@@ -913,6 +932,11 @@ export default function InspectorDashboard() {
                                 </div>
                               </section>
 
+                              {/* ENHANCEMENT: Clear Next Step Banner */}
+                              <div className={`sd-next-step-alert tone-${nextStep.tone}`}>
+                                <strong>Next Step:</strong> {nextStep.text}
+                              </div>
+
                               {r.sellerMessage && <p className="sd-card-foot">Seller instructions: {r.sellerMessage}</p>}
 
                               <section className="sd-card-block">
@@ -947,13 +971,12 @@ export default function InspectorDashboard() {
                               <div className="sd-card-actions">
                                 {r.status === 'ACCEPTED' && (
                                   <>
-                                    {/* FIXED: Requires BOTH sellerConfirmedAt AND inspectorOnSiteConfirmedAt to show the button */}
                                     {r.sellerConfirmedAt && r.inspectorOnSiteConfirmedAt ? (
-                                      <button type="button" className="sd-btn" onClick={() => startInspection(r.id)}>Start inspection</button>
+                                      <button type="button" className="sd-btn sd-btn--primary" onClick={() => startInspection(r.id)}>Start inspection</button>
                                     ) : !r.sellerConfirmedAt ? (
-                                      <p role="status">Waiting for seller confirmation of your fee. You cannot start or report yet.</p>
+                                      <p role="status" className="sd-muted">Waiting for seller confirmation of your fee.</p>
                                     ) : (
-                                      <p role="status">Waiting for seller to confirm your arrival on site. You cannot start the inspection yet.</p>
+                                      <p role="status" className="sd-muted">Waiting for seller to confirm your arrival on site.</p>
                                     )}
 
                                     {acceptedQuote && !paid && (
@@ -974,7 +997,7 @@ export default function InspectorDashboard() {
                                 {r.status === 'IN_PROGRESS' && (
                                   <button
                                     type="button"
-                                    className="sd-btn"
+                                    className="sd-btn sd-btn--primary"
                                     onClick={() => openReportForm(r.id)}
                                   >
                                     Submit report
