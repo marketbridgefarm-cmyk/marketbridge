@@ -947,10 +947,13 @@ export default function InspectorDashboard() {
                               <div className="sd-card-actions">
                                 {r.status === 'ACCEPTED' && (
                                   <>
-                                    {r.sellerConfirmedAt ? (
+                                    {/* FIXED: Requires BOTH sellerConfirmedAt AND inspectorOnSiteConfirmedAt to show the button */}
+                                    {r.sellerConfirmedAt && r.inspectorOnSiteConfirmedAt ? (
                                       <button type="button" className="sd-btn" onClick={() => startInspection(r.id)}>Start inspection</button>
+                                    ) : !r.sellerConfirmedAt ? (
+                                      <p role="status">Waiting for seller confirmation of your fee. You cannot start or report yet.</p>
                                     ) : (
-                                      <p role="status">Waiting for seller confirmation. You cannot start or report yet.</p>
+                                      <p role="status">Waiting for seller to confirm your arrival on site. You cannot start the inspection yet.</p>
                                     )}
 
                                     {acceptedQuote && !paid && (
