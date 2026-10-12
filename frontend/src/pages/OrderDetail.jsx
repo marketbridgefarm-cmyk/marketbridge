@@ -456,30 +456,33 @@ function OverviewCard({ order, title, flags, canCancel, busy, onCancel }) {
   const other = showBuyer ? order.buyer : order.seller;
   const delivered = ['DELIVERED', 'COMPLETED'].includes(order.status) || transportJob?.status === 'DELIVERED';
 
+  // FIXED: Added 'Inspected' and 'Decided' steps to accurately reflect the workflow
+  const inspectionDone = order.inspectionRequests?.some(r => r.status === 'COMPLETED' && r.report) || false;
+  const decisionDone = order.buyerDecision === 'BUY';
+
   const steps = [
     { label: 'Ordered', done: true },
+    { label: 'Inspected', done: inspectionApplies ? inspectionDone : true },
+    { label: 'Decided', done: decisionDone },
     { label: 'Paid', done: marketplacePaid },
     { label: 'Delivered', done: delivered },
     { label: 'Completed', done: order.status === 'COMPLETED' },
   ];
 
-  // The first step that isn't done is the current stage; if every step is
-  // done, the last step ("Completed") is the current state.
   const currentStep = steps.find((s) => !s.done) || steps[steps.length - 1];
   const currentTone =
     currentStep.label === 'Completed' ? 'good'
     : currentStep.label === 'Delivered' ? 'info'
     : currentStep.label === 'Paid' ? 'wait'
+    : currentStep.label === 'Inspected' ? 'info'
+    : currentStep.label === 'Decided' ? 'wait'
     : 'neutral';
 
-  // If the order was cancelled, the "current" step is meaningless; show
-  // the terminal status instead.
   const headerStatus =
     order.status === 'CANCELLED'
       ? { label: 'Cancelled', tone: 'bad' }
       : { label: currentStep.label, tone: currentTone };
 
-  // Party shown in the header: buyer when viewing as seller, seller otherwise.
   const partyRole = showBuyer ? 'Buyer' : 'Seller';
 
   const created = order.createdAt
@@ -723,9 +726,9 @@ function InspectionCard({ order, title, i }) {
   }
 
   const report = request.report;
-  const reportReady = request.status === 'COMPLETED' && Boolean(report);
+  // FIXED: Show findings if report exists, even if the request is cancelled
+  const reportReady = Boolean(report);
   const leafList = leafQuotes(request.quotes);
-  // FIXED: Include WAITING status in the pending and live bidder counts
   const pendingLeafCount = leafList.filter((q) => ['PENDING', 'WAITING'].includes(q.status)).length;
   const liveBidderCount = leafList.filter((q) => ['PENDING', 'WAITING', 'SELECTED', 'COUNTERED', 'ACCEPTED'].includes(q.status)).length;
   const inspectorName = request.inspector?.name || null;
@@ -845,7 +848,6 @@ function InspectionCard({ order, title, i }) {
                   const requesterCanAct =
                     isRequester && request.status === 'REQUESTED' && (isSelected || isCounteredByProvider);
                   const canSelect = isRequester && request.status === 'REQUESTED' && isPending;
-                  // FIXED: Treat WAITING status same as PENDING for UI rendering
                   const isWaiting = (isPending || quote.status === 'WAITING') && request.status !== 'REQUESTED';
 
                   return (
@@ -1268,7 +1270,6 @@ function QuoteRow({ quote, t, hasActiveNegotiation }) {
   const rating = typeof quote.truckOwner?.rating === 'number' ? quote.truckOwner.rating.toFixed(1) : '—';
   const ownerName = quote.truckOwner?.name || 'Truck owner';
 
-  // FIXED: Treat WAITING status same as PENDING for UI rendering
   const isWaitingPending =
     (quote.status === 'PENDING' || quote.status === 'WAITING') && 
     !['REQUESTED', 'QUOTED'].includes(t.job?.status);
@@ -1412,7 +1413,6 @@ function TransportCard({ order, t }) {
   const job = t.job;
   const hired = job?.method === 'HIRE_TRANSPORTER';
   const quotes = leafQuotes(job?.quotes);
-  // FIXED: Include WAITING status in the pending and live bidder counts
   const pendingLeafCount = quotes.filter((q) => ['PENDING', 'WAITING'].includes(q.status)).length;
 
   const hasActiveNegotiation = quotes.some((q) =>
@@ -1938,7 +1938,6 @@ export default function OrderDetail() {
   const [activeModal, setActiveModal] = useState(null);
 
   const [providerReleaseTarget, setProviderReleaseTarget] = useState(null);
-  // Shape: { service: 'INSPECTION' | 'TRANSPORT', quoteId, inspectionRequestId?, transportJobId? }
 
   const [payMethod, setPayMethod] = useState('TELEBIRR');
 
@@ -2088,7 +2087,8 @@ export default function OrderDetail() {
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
     [order?.inspectionRequests, order?.listing?.inspectionRequests]
   );
-  const inspections = useMemo(() => allInspections.filter((r) => r.status !== 'CANCELLED'), [allInspections]);
+  // FIXED: Use all inspections including cancelled so history/payments are visible
+  const inspections = allInspections;
   const currentInspection = inspections[0] || null;
   const assignedInspection = inspections.find((r) => r.inspectorId === currentUserId) || null;
   const isInspector = Boolean(assignedInspection);
@@ -2414,9 +2414,6 @@ export default function OrderDetail() {
       })
     : [];
 
-  // ----------------------------------------------------------------------
-  // SHARED PROVIDER RELEASE HANDLER
-  // ----------------------------------------------------------------------
   const submitProviderRelease = async ({ reason, note }) => {
     if (!providerReleaseTarget) return false;
     const { service, quoteId, inspectionRequestId, transportJobId } = providerReleaseTarget;
