@@ -2227,6 +2227,29 @@ router.patch(
           data: { status: 'REJECTED' },
         });
 
+        // FIXED: Same ancestor cleanup as withdraw. Prevents the parent
+        // COUNTERED quote from appearing active after the leaf is rejected.
+        // The `in: ['PENDING', 'SELECTED', 'COUNTERED']` guard protects any
+        // ancestor already in a terminal state from being overwritten.
+        const ancestorIds = [];
+        let cursor = freshQuote.parentQuoteId;
+        let safety = 0;
+        while (cursor && safety < 20) {
+          ancestorIds.push(cursor);
+          const parent = await tx.transportQuote.findUnique({
+            where: { id: cursor },
+            select: { parentQuoteId: true },
+          });
+          cursor = parent?.parentQuoteId || null;
+          safety += 1;
+        }
+        if (ancestorIds.length) {
+          await tx.transportQuote.updateMany({
+            where: { id: { in: ancestorIds }, status: { in: ['PENDING', 'SELECTED', 'COUNTERED'] } },
+            data: { status: 'REJECTED' },
+          });
+        }
+
         await recordAuditEvent(tx, {
           actorId: req.user.id,
           action: 'TRANSPORT_QUOTE_REJECTED',
@@ -2546,6 +2569,35 @@ router.patch(
           data: { status: 'WITHDRAWN' },
         });
 
+        // FIXED: Withdraw every ancestor in the negotiation thread. Without
+        // this, a parent quote left in COUNTERED state keeps showing up as an
+        // active negotiation on the buyer's side (because the withdrawn child
+        // is filtered out of the API response), blocking selection of other
+        // pending bids.
+        //
+        // The `in: ['PENDING', 'SELECTED', 'COUNTERED']` filter only touches
+        // ancestors that are still mid-negotiation. Any ancestor already in a
+        // terminal state (ACCEPTED / REJECTED / WITHDRAWN) is left alone so we
+        // never rewrite settled history.
+        const ancestorIds = [];
+        let cursor = freshQuote.parentQuoteId;
+        let safety = 0;
+        while (cursor && safety < 20) {
+          ancestorIds.push(cursor);
+          const parent = await tx.transportQuote.findUnique({
+            where: { id: cursor },
+            select: { parentQuoteId: true },
+          });
+          cursor = parent?.parentQuoteId || null;
+          safety += 1;
+        }
+        if (ancestorIds.length) {
+          await tx.transportQuote.updateMany({
+            where: { id: { in: ancestorIds }, status: { in: ['PENDING', 'SELECTED', 'COUNTERED'] } },
+            data: { status: 'WITHDRAWN' },
+          });
+        }
+
         if (isAcceptedRelease) {
           await tx.transportJob.update({
             where: { id: freshQuote.transportJobId },
@@ -2603,6 +2655,7 @@ router.patch(
             reason: releaseInfo.reason,
             note: releaseInfo.note,
             releaseNumber,
+            ancestorsWithdrawn: ancestorIds.length,
             ...(isProviderRelease
               ? {
                   providerReleases30d,
