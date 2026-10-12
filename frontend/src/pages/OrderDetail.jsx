@@ -725,8 +725,9 @@ function InspectionCard({ order, title, i }) {
   const report = request.report;
   const reportReady = request.status === 'COMPLETED' && Boolean(report);
   const leafList = leafQuotes(request.quotes);
-  const pendingLeafCount = leafList.filter((q) => q.status === 'PENDING').length;
-  const liveBidderCount = leafList.filter((q) => ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'].includes(q.status)).length;
+  // FIXED: Include WAITING status in the pending and live bidder counts
+  const pendingLeafCount = leafList.filter((q) => ['PENDING', 'WAITING'].includes(q.status)).length;
+  const liveBidderCount = leafList.filter((q) => ['PENDING', 'WAITING', 'SELECTED', 'COUNTERED', 'ACCEPTED'].includes(q.status)).length;
   const inspectorName = request.inspector?.name || null;
   const inspectionDate =
     report?.inspectedAt || report?.completedAt || request.completedAt || request.updatedAt || request.createdAt || null;
@@ -844,7 +845,8 @@ function InspectionCard({ order, title, i }) {
                   const requesterCanAct =
                     isRequester && request.status === 'REQUESTED' && (isSelected || isCounteredByProvider);
                   const canSelect = isRequester && request.status === 'REQUESTED' && isPending;
-                  const isWaiting = isPending && request.status !== 'REQUESTED';
+                  // FIXED: Treat WAITING status same as PENDING for UI rendering
+                  const isWaiting = (isPending || quote.status === 'WAITING') && request.status !== 'REQUESTED';
 
                   return (
                     <div className="transporter" key={quote.id}>
@@ -1266,8 +1268,10 @@ function QuoteRow({ quote, t, hasActiveNegotiation }) {
   const rating = typeof quote.truckOwner?.rating === 'number' ? quote.truckOwner.rating.toFixed(1) : '—';
   const ownerName = quote.truckOwner?.name || 'Truck owner';
 
+  // FIXED: Treat WAITING status same as PENDING for UI rendering
   const isWaitingPending =
-    quote.status === 'PENDING' && !['REQUESTED', 'QUOTED'].includes(t.job?.status);
+    (quote.status === 'PENDING' || quote.status === 'WAITING') && 
+    !['REQUESTED', 'QUOTED'].includes(t.job?.status);
 
   return (
     <div className="transporter">
@@ -1408,12 +1412,13 @@ function TransportCard({ order, t }) {
   const job = t.job;
   const hired = job?.method === 'HIRE_TRANSPORTER';
   const quotes = leafQuotes(job?.quotes);
-  const pendingLeafCount = quotes.filter((q) => q.status === 'PENDING').length;
+  // FIXED: Include WAITING status in the pending and live bidder counts
+  const pendingLeafCount = quotes.filter((q) => ['PENDING', 'WAITING'].includes(q.status)).length;
 
   const hasActiveNegotiation = quotes.some((q) =>
     ['SELECTED', 'COUNTERED', 'ACCEPTED'].includes(q.status)
   );
-  const liveBidderCount = quotes.filter((q) => ['PENDING', 'SELECTED', 'COUNTERED', 'ACCEPTED'].includes(q.status)).length;
+  const liveBidderCount = quotes.filter((q) => ['PENDING', 'WAITING', 'SELECTED', 'COUNTERED', 'ACCEPTED'].includes(q.status)).length;
 
   if (!job) {
     return (
