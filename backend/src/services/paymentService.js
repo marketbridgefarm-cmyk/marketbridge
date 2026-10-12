@@ -1638,13 +1638,8 @@ async function settlePaymentCore({
             data: { status: 'ACCEPTED' },
           });
 
-          await tx.transportQuote.updateMany({
-            where: {
-              transportJobId: job.id,
-              status: { in: ['PENDING', 'SELECTED', 'COUNTERED'] },
-            },
-            data: { status: 'REJECTED' },
-          });
+          // FIXED: Removed the transportQuote.updateMany block that was rejecting
+          // the waiting list. The waiting list should stay active until delivery.
 
           const order = await tx.order.findUnique({ where: { id: job.orderId }, select: { id: true, status: true } });
           if (order?.status === 'CONFIRMED') {
@@ -1673,13 +1668,8 @@ async function settlePaymentCore({
             data: { status: 'ACCEPTED' },
           });
 
-          await tx.inspectionQuote.updateMany({
-            where: {
-              inspectionRequestId: request.id,
-              status: { in: ['PENDING', 'SELECTED', 'COUNTERED'] },
-            },
-            data: { status: 'REJECTED' },
-          });
+          // FIXED: Removed the inspectionQuote.updateMany block that was rejecting
+          // the waiting list. The waiting list should stay active until the report is submitted.
         }
 
         // --------------------------------------------------------------------
@@ -1899,10 +1889,9 @@ async function replayDisputedPaidPayment(tx, paymentId) {
           where: { id: job.id },
           data: { status: 'ACCEPTED' },
         });
-        await tx.transportQuote.updateMany({
-          where: { transportJobId: job.id, status: { in: ['PENDING', 'SELECTED', 'COUNTERED'] } },
-          data: { status: 'REJECTED' },
-        });
+        
+        // FIXED: Removed the transportQuote.updateMany block here as well
+
         const order = await tx.order.findUnique({ where: { id: job.orderId }, select: { id: true, status: true } });
         if (order?.status === 'CONFIRMED') {
           await transitionOrderStatus(tx, order.id, 'CONFIRMED', 'TRANSPORT_ARRANGED');
@@ -1931,10 +1920,8 @@ async function replayDisputedPaidPayment(tx, paymentId) {
         where: { id: request.id },
         data: { status: 'ACCEPTED' },
       });
-      await tx.inspectionQuote.updateMany({
-        where: { inspectionRequestId: request.id, status: { in: ['PENDING', 'SELECTED', 'COUNTERED'] } },
-        data: { status: 'REJECTED' },
-      });
+      
+      // FIXED: Removed the inspectionQuote.updateMany block here as well
     }
     await payoutService.createPayoutHold(tx, {
       orderId: payment.inspectionRequest.orderId,
