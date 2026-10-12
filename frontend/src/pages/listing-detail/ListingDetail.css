@@ -222,13 +222,8 @@
 
 .detail-page .sticky-card { position: relative; }
 
-@media (min-width: 960px) {
-  .detail-page .sticky-card {
-    position: sticky;
-    top: 24px;
-    align-self: start;
-  }
-}
+/* Sticky is disabled: a pinned card stays put while the next card scrolls
+   over it, which hid the Submit bid button behind the Seller card. */
 
 /* A nested .card on this page becomes a flat sub-block, never a second tile. */
 #root .detail-page .card .card {
@@ -981,3 +976,18 @@
 #root .detail-page .detail-media-thumbs { margin-bottom: var(--detail-gap); }
 #root .detail-page .detail-media-thumbs > :first-child { margin-left: auto; }
 #root .detail-page .detail-media-thumbs > :last-child { margin-right: auto; }
+
+/* --------------------------------------------------------------------------
+   19. Never let a card cover the one above it (hidden Submit bid button).
+   Cards flow normally; no sticky pinning, no fixed height, no clipping.
+   -------------------------------------------------------------------------- */
+
+#root .detail-page .sticky-card,
+#root .detail-page .detail-grid > aside > .card,
+#root .detail-page .detail-grid > section > .card {
+  position: relative !important;
+  top: auto !important;
+  height: auto !important;
+  max-height: none !important;
+  overflow: visible !important;
+}
