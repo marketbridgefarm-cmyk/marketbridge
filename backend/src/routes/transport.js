@@ -614,12 +614,9 @@ router.post(
         });
       }
 
-      if (isPhysicalGoods && method === 'OWN_TRUCK') {
-        return res.status(409).json({
-          code: 'AGRICULTURAL_TRANSPORT_COMPETITION_REQUIRED',
-          error: 'Physical goods use the competitive transporter workflow: the buyer requests transport and registered truck owners submit competing quotes.',
-        });
-      }
+      // FIXED: Removed the OWN_TRUCK block that prevented physical-goods orders
+      // from using their own truck. Both buyer and seller can now arrange
+      // transport with their own vehicle for agricultural and product orders.
 
       if (!['SELLER', 'BUYER', 'JOINT'].includes(resolvedArrangingParty)) {
         return res.status(400).json({ error: 'arrangingParty must be SELLER, BUYER, or JOINT' });
