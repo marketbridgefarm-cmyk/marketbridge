@@ -46,6 +46,32 @@ const HANDLING_OPTIONS = [
   ['COVERED', 'Covered load'],
 ];
 
+// FIXED: Closed-list operating areas so no free-form text (and no leaked
+// contact info) can enter the truck record. Matches the Ethiopian regions
+// and corridors buyers and sellers actually trade on.
+const OPERATING_AREAS = [
+  'Addis Ababa',
+  'Adama',
+  'Bahirdar',
+  'Dire Dawa',
+  'Gondar',
+  'Hawassa',
+  'Jimma',
+  'Mekelle',
+  'Shashemene',
+  'Amhara region',
+  'Oromia region',
+  'Tigray region',
+  'SNNPR region',
+  'Sidama region',
+  'Somali region',
+  'Afar region',
+  'Benishangul-Gumuz region',
+  'Gambella region',
+  'Harari region',
+  'Multi-region',
+];
+
 export default function TransportSetup({
   orderId,
   pickupDefault,
@@ -555,6 +581,8 @@ export default function TransportSetup({
 
             <form onSubmit={registerTruck}>
               <div className="od-form-grid">
+                {/* FIXED: Registration is now strictly formatted. No phone
+                    numbers, no emails, no URLs. */}
                 <div className="od-tf">
                   <label htmlFor="reg-plate">Registration plate</label>
                   <input
@@ -562,25 +590,35 @@ export default function TransportSetup({
                     type="text"
                     className="field"
                     required
+                    maxLength={15}
+                    pattern="[A-Za-z0-9\- ]{3,15}"
+                    title="3–15 letters, numbers, spaces or dashes"
                     value={truckForm.registration}
                     onChange={(e) => setTruckForm({ ...truckForm, registration: e.target.value })}
                     placeholder="e.g. ET-12345"
                     disabled={truckSubmitting}
                   />
+                  <p className="ts-field-hint">
+                    Letters, numbers, spaces or dashes only. No phone numbers.
+                  </p>
                 </div>
 
+                {/* FIXED: Truck type is now a closed dropdown. No free text. */}
                 <div className="od-tf">
                   <label htmlFor="reg-type">Truck type</label>
-                  <input
+                  <select
                     id="reg-type"
-                    type="text"
                     className="field"
                     required
                     value={truckForm.truckType}
                     onChange={(e) => setTruckForm({ ...truckForm, truckType: e.target.value })}
-                    placeholder="e.g. Flatbed, Isuzu, FSR"
                     disabled={truckSubmitting}
-                  />
+                  >
+                    <option value="">Select truck type…</option>
+                    {VEHICLE_TYPES.map((v) => (
+                      <option key={v} value={v}>{v}</option>
+                    ))}
+                  </select>
                 </div>
 
                 <div className="od-tf">
@@ -588,8 +626,9 @@ export default function TransportSetup({
                   <input
                     id="reg-capacity"
                     type="number"
-                    min="0.1"
-                    step="0.1"
+                    min="1"
+                    max="150"
+                    step="0.5"
                     className="field"
                     required
                     value={truckForm.capacity}
@@ -599,17 +638,22 @@ export default function TransportSetup({
                   />
                 </div>
 
+                {/* FIXED: Operating area is now a closed dropdown. No free text. */}
                 <div className="od-tf">
-                  <label htmlFor="reg-area">Operating area / routes</label>
-                  <input
+                  <label htmlFor="reg-area">Operating area</label>
+                  <select
                     id="reg-area"
-                    type="text"
                     className="field"
+                    required
                     value={truckForm.operatingArea}
                     onChange={(e) => setTruckForm({ ...truckForm, operatingArea: e.target.value })}
-                    placeholder="e.g. Addis Ababa – Jimma"
                     disabled={truckSubmitting}
-                  />
+                  >
+                    <option value="">Select operating area…</option>
+                    {OPERATING_AREAS.map((a) => (
+                      <option key={a} value={a}>{a}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
