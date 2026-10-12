@@ -748,23 +748,13 @@ router.patch(
           });
         }
 
-        if (decision === 'BUY') {
-          const transportJob = current.transportJob;
-          if (!transportJob || transportJob.status !== 'ACCEPTED') {
-            throw Object.assign(new Error(
-              'Select and agree a transporter before making the final BUY decision.'
-            ), { status: 409, code: 'TRANSPORT_SELECTION_REQUIRED_FOR_BUY' });
-          }
-          const confirmed = await tx.transportJob.findUnique({
-            where: { id: transportJob.id },
-            select: { status: true, sellerPickupConfirmedAt: true },
-          });
-          if (!confirmed?.sellerPickupConfirmedAt) {
-            throw Object.assign(new Error(
-              'The seller must confirm that the selected transporter is prepared before the final BUY decision and seller payment can proceed.'
-            ), { status: 409, code: 'SELLER_TRANSPORT_PREPARATION_CONFIRMATION_REQUIRED' });
-          }
-        }
+ // FIXED: The BUY decision no longer requires a transporter to already
+// be selected. Transport bidding opens *after* the BUY decision, so
+// requiring a transporter here would be circular. The loading-prep
+// report and buyer approval gates downstream will ensure safety.
+if (decision === 'BUY') {
+  // No transport gate. The buyer commits first, then arranges transport.
+}
 
         if (decision === 'CANCEL') {
           const reason = req.body.reason || 'Buyer declined the transaction after inspection';
@@ -800,19 +790,22 @@ router.patch(
 
         const now = new Date();
         const claimed = await tx.order.updateMany({
-          where: {
-            id: current.id,
-            buyerDecision: null,
-            status: { notIn: ['CANCELLED', 'COMPLETED'] },
-          },
-          data: {
-            buyerDecision: 'BUY',
-            buyerDecisionAt: now,
-            buyerReviewedReportAt: now,
-            buyerDecisionDueAt: null,
-            paymentDueAt: computePaymentDueAt(),
-          },
-        });
+  where: {
+    id: current.id,
+    buyerDecision: null,
+    status: { notIn: ['CANCELLED', 'COMPLETED'] },
+  },
+  data: {
+    buyerDecision: 'BUY',
+    buyerDecisionAt: now,
+    buyerReviewedReportAt: now,
+    buyerDecisionDueAt: null,
+    // FIXED: paymentDueAt is intentionally NOT set here. The goods
+    // payment obligation and its due date are created later, when the
+    // transporter submits the loading-preparation report and the
+    // buyer approves it. See routes/transport.js.
+  },
+});
 
         if (claimed.count !== 1) {
           throw Object.assign(
