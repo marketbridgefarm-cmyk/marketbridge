@@ -589,6 +589,22 @@ export default function TruckOwnerDashboard() {
     }
   }
 
+  // FIXED: separate handler so the "truck arrived on site" action doesn't
+  // have to go through the /status route (which has a different payload and
+  // validation). Backend endpoint: POST /transport/:id/truck-arrived.
+  async function confirmTruckArrived(jobId) {
+    setActionLoading(`status-${jobId}-ARRIVED`);
+    try {
+      await api.post(`/transport/${jobId}/truck-arrived`);
+      toast('Truck arrival confirmed.');
+      await loadAll(false);
+    } catch (err) {
+      toast(getErrorMessage(err, 'Could not confirm truck arrival.'));
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
   function openEvidenceModal(jobId, type, nextStatus) {
     setEvidenceModal({ jobId, type, nextStatus });
     setEvidenceKeys({ photoKeys: [], videoKeys: [] });
@@ -714,55 +730,63 @@ export default function TruckOwnerDashboard() {
     }
 
     if (job.status === 'ACCEPTED') {
-      const acceptedQuote = (job.quotes || []).find(
-        (quote) => quote.status === 'ACCEPTED'
-      );
+      const acceptedQuote = (job.quotes || []).find((q) => q.status === 'ACCEPTED');
       const orderPayments = job.order?.payments || [];
-      const marketplacePaid = orderPayments.some(
-        (p) => p.type === 'MARKETPLACE' && p.status === 'PAID'
-      );
+      const marketplacePaid = orderPayments.some((p) => p.type === 'MARKETPLACE' && p.status === 'PAID');
       const transportPaid =
         job.method !== 'HIRE_TRANSPORTER' ||
         orderPayments.some((p) => p.type === 'TRANSPORT' && p.status === 'PAID') ||
         (job.payments || []).some((p) => p.type === 'TRANSPORT' && p.status === 'PAID');
-      // FIX: /transport/mine attaches inspectionRequests to the ORDER, not to
-      // order.listing. The previous path (job.order.listing.inspectionRequests)
-      // was always undefined, so this check silently passed.
-      const inspectionRequests = job.order?.inspectionRequests || [];
-      const inspectionPaid = inspectionRequests
-        .filter((r) => r.status !== 'CANCELLED' && r.fee != null && Number(r.fee) > 0)
-        .every((r) =>
-          (r.payments || []).some((p) => p.type === 'INSPECTOR' && p.status === 'PAID')
+
+      const waiting = (text, extra) => (
+        <div className="sd-job-actions">
+          <p className="sd-job-waiting">
+            <span className="sd-job-waiting-dot" aria-hidden="true" />{text}
+          </p>
+          {extra}
+        </div>
+      );
+
+      if (!transportPaid) {
+        return waiting('Waiting for the buyer to pay the transport fee',
+          acceptedQuote && (
+            <button type="button" className="sd-btn sd-btn-outline"
+              disabled={actionLoading === `quote-${acceptedQuote.id}`}
+              onClick={() => releaseTransportAgreement(job.id, acceptedQuote.id)}>
+              {actionLoading === `quote-${acceptedQuote.id}` ? 'Cancelling…' : 'Cancel provisional deal'}
+            </button>
+          ));
+      }
+      if (!job.sellerPickupConfirmedAt) return waiting('Waiting for the seller to confirm loading preparation');
+      if (!job.truckArrivedAt) {
+        return (
+          <div className="sd-job-actions">
+            <button type="button" className="sd-btn sd-btn-primary" disabled={busy}
+              onClick={() => confirmTruckArrived(job.id)}>
+              {busy ? 'Confirming…' : 'Confirm truck arrived on site'}
+            </button>
+          </div>
         );
-      const paymentsReady = marketplacePaid && transportPaid && inspectionPaid;
+      }
+      if (!job.loadingReport) {
+        return (
+          <div className="sd-job-actions">
+            <Link to={`/orders/${job.orderId}`} className="sd-btn sd-btn-primary">
+              Submit loading-prep report
+            </Link>
+            <p className="sd-job-note">Record what you will load. The buyer reviews it before goods payment.</p>
+          </div>
+        );
+      }
+      if (!job.buyerLoadingConfirmedAt) return waiting('Waiting for the buyer to approve the loading report');
+      if (!marketplacePaid) return waiting('Waiting for the buyer to pay for the goods');
 
       return (
         <div className="sd-job-actions">
-          <button
-            type="button"
-            className="sd-btn sd-btn-primary"
-            disabled={busy || !paymentsReady}
-            onClick={() => updateStatus(job.id, 'PICKUP')}
-          >
-            {busy ? 'Updating…' : paymentsReady ? 'Mark picked up' : 'Waiting for all payments'}
+          <button type="button" className="sd-btn sd-btn-primary" disabled={busy}
+            onClick={() => updateStatus(job.id, 'PICKUP')}>
+            {busy ? 'Updating…' : 'Mark picked up'}
           </button>
-
-          {!paymentsReady && (
-            <p className="sd-job-note">
-              The deal is provisional until all payments settle. The buyer can still cancel and select another transporter before payment completes.
-            </p>
-          )}
-
-          {!transportPaid && acceptedQuote && (
-            <button
-              type="button"
-              className="sd-btn sd-btn-outline"
-              disabled={actionLoading === `quote-${acceptedQuote.id}`}
-              onClick={() => releaseTransportAgreement(job.id, acceptedQuote.id)}
-            >
-              {actionLoading === `quote-${acceptedQuote.id}` ? 'Cancelling…' : 'Cancel provisional deal'}
-            </button>
-          )}
         </div>
       );
     }
