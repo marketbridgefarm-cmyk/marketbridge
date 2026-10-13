@@ -1,437 +1,682 @@
-/* ==========================================================================
-   TRANSPORT LOADING REPORT
-   --------------------------------------------------------------------------
-   Design language mirrors the mobile order card:
-     · soft grey page, white floating card, 24px radius
-     · deep green section headers with a short "eyebrow" dash before them
-     · transparent large buttons with thin grey borders
-     · sunken grey inputs that glow green on focus
-   ========================================================================== */
+import React, { useCallback, useEffect, useState } from 'react';
+import AmountPicker from './AmountPicker.jsx';
+import EvidenceUploader from './EvidenceUploader.jsx';
+import api from '../api/client';
+import './TransportLoadingReport.css';
 
-.tlr-card {
-  /* tokens */
-  --tlr-bg:          #ffffff;
-  --tlr-sunken:      #f9fafb;
-  --tlr-text:        #111827;
-  --tlr-text-2:      #6b7280;
-  --tlr-green:       #0f6b3e;
-  --tlr-green-dark:  #0a4f2d;
-  --tlr-green-soft:  rgba(15, 107, 62, 0.06);
-  --tlr-green-ring:  rgba(15, 107, 62, 0.12);
-  --tlr-orange:      #d97706;
-  --tlr-orange-soft: #fef3e7;
-  --tlr-orange-line: rgba(217, 119, 6, 0.22);
-  --tlr-danger:      #dc2626;
-  --tlr-danger-soft: #fef2f2;
-  --tlr-danger-line: rgba(220, 38, 38, 0.22);
-  --tlr-border:      #e5e7eb;
-  --tlr-border-soft: #f3f4f6;
+// ============================================================================
+// TRANSPORT LOADING REPORT
+// ----------------------------------------------------------------------------
+// The truck owner's structured pre-loading record captured at the pickup site.
+// It is reachable once: (1) the buyer has paid the transport fee, (2) the
+// seller has confirmed the goods are prepared, and (3) the truck is marked on
+// site. The buyer then reviews it, and approval unlocks the goods payment.
+// These gates are enforced on the server and mirrored here so the form never
+// opens when it cannot succeed.
+//
+// Every field is a dropdown, checkbox list, or AmountPicker. There is no
+// free-text numeric input anywhere, so a phone number cannot be smuggled into
+// a price or quantity field. GPS is captured via the browser's geolocation
+// API (with a strict lat,lng fallback). Notes are the only free text and are
+// pre-checked on the client AND passed through the server's noContactInfo
+// guard before saving.
+// ============================================================================
 
-  --tlr-radius-card:  24px;
-  --tlr-radius-input: 12px;
-  --tlr-radius-pill:  999px;
+const WHAT_LOADED_OPTIONS = [
+  ['AS_LISTED', 'As listed'],
+  ['SAME_PRODUCT_DIFFERENT_VARIETY', 'Same product, different variety'],
+  ['PARTIAL_OF_LISTED', 'Partial of listed product'],
+  ['DIFFERENT_PRODUCT', 'Different product'],
+  ['REFUSED_TO_LOAD', 'Refused to load'],
+];
 
-  --tlr-shadow:
-    0 4px 20px rgba(0, 0, 0, 0.03),
-    0 2px 8px  rgba(0, 0, 0, 0.02);
+const QUALITY_OPTIONS = [
+  ['AS_INSPECTED', 'As inspected'],
+  ['MINOR_VARIANCE', 'Minor variance'],
+  ['MAJOR_VARIANCE', 'Major variance'],
+  ['DAMAGED', 'Damaged'],
+  ['NOT_INSPECTED', 'Not inspected'],
+];
 
-  box-sizing: border-box;
-  width: 100%;
-  padding: 24px;
-  background: var(--tlr-bg);
-  border: 1px solid rgba(0, 0, 0, 0.02);
-  border-radius: var(--tlr-radius-card);
-  box-shadow: var(--tlr-shadow);
-  color: var(--tlr-text);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-    "Helvetica Neue", Arial, sans-serif;
-  font-size: 14px;
-  line-height: 1.5;
-  -webkit-font-smoothing: antialiased;
+const ISSUE_OPTIONS = [
+  ['NONE', 'No visible issues'],
+  ['FRESHNESS_CONCERN', 'Freshness concern'],
+  ['PHYSICAL_DAMAGE', 'Physical damage'],
+  ['PACKAGING_DAMAGE', 'Packaging damage'],
+  ['QUANTITY_SHORTFALL', 'Quantity shortfall'],
+  ['WRONG_PRODUCT', 'Wrong product'],
+  ['CONTAMINATION', 'Contamination'],
+  ['WEATHER_EXPOSURE', 'Weather exposure'],
+];
 
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
+const UNIT_OPTIONS = ['kg', 'quintal', 'ton', 'crate', 'bag', 'piece'];
+
+const EMPTY_FORM = {
+  whatLoaded: 'AS_LISTED',
+  quantityLoaded: '',
+  quantityUnit: 'quintal',
+  qualityAtLoading: 'AS_INSPECTED',
+  visibleIssues: [],
+  arrivedAt: '',
+  loadingStartedAt: '',
+  loadingFinishedAt: '',
+  gpsLocation: '',
+  notes: '',
+};
+
+// ── Strict GPS pattern: "lat, lng" only. No letters, no phone numbers. ────
+const GPS_PATTERN = /^-?\d{1,3}(\.\d{1,8})?\s*,\s*-?\d{1,3}(\.\d{1,8})?$/;
+
+// ── Client-side contact detection (fail fast; server still re-checks) ─────
+const PHONE_LIKE = /(?:\+?\d[\d\s\-().]{7,})/;
+const EMAIL_LIKE = /[\w.-]+@[\w.-]+\.\w+/;
+const URL_LIKE = /(?:https?:\/\/|www\.)\S+/i;
+
+function containsContactInfo(text) {
+  if (!text) return false;
+  return PHONE_LIKE.test(text) || EMAIL_LIKE.test(text) || URL_LIKE.test(text);
 }
 
-.tlr-card * { box-sizing: border-box; }
-
-/* ---------- Section head with eyebrow dash ---------- */
-
-.tlr-head {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid var(--tlr-border-soft);
+function toIso(value) {
+  if (!value) return null;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
 
-.tlr-title {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 0;
-  font-size: 18px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  color: var(--tlr-green);
+function fmtDateTime(value) {
+  if (!value) return '—';
+  const d = new Date(value);
+  return Number.isNaN(d.getTime())
+    ? '—'
+    : d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 }
 
-.tlr-title::before {
-  content: '';
-  display: inline-block;
-  flex-shrink: 0;
-  width: 24px;
-  height: 3px;
-  border-radius: 2px;
-  background: var(--tlr-green);
+function fmtMoney(v) {
+  return Number(v || 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
 }
 
-.tlr-meta {
-  padding-left: 34px;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--tlr-text-2);
+// ----------------------------------------------------------------------------
+// Small building blocks
+// ----------------------------------------------------------------------------
+
+function SectionHead({ title, meta }) {
+  return (
+    <div className="tlr-head">
+      <h3 className="tlr-title">{title}</h3>
+      {meta && <div className="tlr-meta">{meta}</div>}
+    </div>
+  );
 }
 
-/* ---------- Form ---------- */
-
-.tlr-form {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
+function Fact({ label, value }) {
+  return (
+    <div className="tlr-fact">
+      <span className="tlr-fact-label">{label}</span>
+      <strong className="tlr-fact-value">{value}</strong>
+    </div>
+  );
 }
 
-.tlr-field {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-width: 0;
+// ============================================================================
+// READ-ONLY SUMMARY (buyer / seller / admin)
+// ============================================================================
+
+export function TransportLoadingReportSummary({ loadingReport, evidence }) {
+  if (!loadingReport) return null;
+
+  const issues = Array.isArray(loadingReport.visibleIssues)
+    ? loadingReport.visibleIssues.filter((v) => v && v !== 'NONE')
+    : [];
+
+  const whatLabel =
+    WHAT_LOADED_OPTIONS.find(([v]) => v === loadingReport.whatLoaded)?.[1] ||
+    loadingReport.whatLoaded;
+  const qualityLabel =
+    QUALITY_OPTIONS.find(([v]) => v === loadingReport.qualityAtLoading)?.[1] ||
+    loadingReport.qualityAtLoading ||
+    '—';
+
+  return (
+    <div className="tlr-card">
+      <SectionHead
+        title="Pre-loading report"
+        meta={
+          loadingReport.submittedBy?.name
+            ? `Submitted by ${loadingReport.submittedBy.name}`
+            : 'Submitted by the transporter'
+        }
+      />
+
+      <div className="tlr-facts">
+        <Fact label="What will be loaded" value={whatLabel} />
+        <Fact
+          label="Quantity to be loaded"
+          value={`${fmtMoney(loadingReport.quantityLoaded)} ${loadingReport.quantityUnit || ''}`.trim()}
+        />
+        <Fact label="Expected condition at loading" value={qualityLabel} />
+        {loadingReport.gpsLocation && (
+          <Fact label="GPS" value={loadingReport.gpsLocation} />
+        )}
+        {loadingReport.arrivedAt && (
+          <Fact label="Arrived at site" value={fmtDateTime(loadingReport.arrivedAt)} />
+        )}
+        {loadingReport.loadingStartedAt && (
+          <Fact
+            label="Loading started"
+            value={fmtDateTime(loadingReport.loadingStartedAt)}
+          />
+        )}
+        {loadingReport.loadingFinishedAt && (
+          <Fact
+            label="Loading finished"
+            value={fmtDateTime(loadingReport.loadingFinishedAt)}
+          />
+        )}
+      </div>
+
+      {issues.length > 0 ? (
+        <div className="tlr-issues">
+          <span className="tlr-small-label">Reported issues</span>
+          <div className="tlr-chip-row">
+            {issues.map((code) => (
+              <span key={code} className="tlr-chip">
+                {ISSUE_OPTIONS.find(([v]) => v === code)?.[1] || code}
+              </span>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <p className="tlr-muted">No issues reported at loading.</p>
+      )}
+
+      {loadingReport.notes && (
+        <div className="tlr-notes">
+          <span className="tlr-small-label">Driver notes</span>
+          <p>{loadingReport.notes}</p>
+        </div>
+      )}
+
+      {evidence &&
+        (evidence.photos?.length > 0 || evidence.videos?.length > 0) && (
+          <p className="tlr-muted">
+            {evidence.photos?.length || 0} photo(s),{' '}
+            {evidence.videos?.length || 0} video(s) attached. Use the evidence
+            gallery below to view them.
+          </p>
+        )}
+    </div>
+  );
 }
 
-.tlr-label {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--tlr-text-2);
-}
+// ============================================================================
+// THE FORM (driver only)
+// ============================================================================
 
-.tlr-hint {
-  font-size: 12px;
-  line-height: 1.4;
-  color: var(--tlr-text-2);
-}
+export default function TransportLoadingReport({
+  transportJobId,
+  jobStatus,
+  sellerConfirmed,
+  truckArrived,
+  paymentsReady, // true once the TRANSPORT fee is paid
+  onSubmitted,
+}) {
+  const [loading, setLoading] = useState(true);
+  const [existing, setExisting] = useState(null);
+  const [existingEvidence, setExistingEvidence] = useState(null);
+  const [loadError, setLoadError] = useState('');
 
-.tlr-row {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 16px;
-  align-items: start;
-}
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [photos, setPhotos] = useState([]);
+  const [videos, setVideos] = useState([]);
+  const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
-.tlr-full { grid-column: 1 / -1; }
+  // GPS capture state
+  const [gpsBusy, setGpsBusy] = useState(false);
+  const [gpsError, setGpsError] = useState('');
 
-/* ---------- Inputs ---------- */
+  const load = useCallback(async () => {
+    setLoading(true);
+    setLoadError('');
+    try {
+      const res = await api.get(`/transport/${transportJobId}/loading-report`);
+      setExisting(res.data?.loadingReport || null);
+      setExistingEvidence(res.data?.evidence || null);
+    } catch (err) {
+      setLoadError(err.response?.data?.error || 'Could not load loading report');
+    } finally {
+      setLoading(false);
+    }
+  }, [transportJobId]);
 
-.tlr-input,
-.tlr-select,
-.tlr-textarea {
-  width: 100%;
-  padding: 14px 16px;
-  border: 1px solid var(--tlr-border);
-  border-radius: var(--tlr-radius-input);
-  background: var(--tlr-sunken);
-  color: var(--tlr-text);
-  font: inherit;
-  font-size: 15px;
-  font-weight: 500;
-  line-height: 1.4;
-  outline: none;
-  appearance: none;
-  -webkit-appearance: none;
-  transition: border-color 120ms ease, background-color 120ms ease,
-    box-shadow 120ms ease;
-}
+  useEffect(() => {
+    load();
+  }, [load]);
 
-.tlr-input:focus,
-.tlr-select:focus,
-.tlr-textarea:focus {
-  border-color: var(--tlr-green);
-  background: var(--tlr-bg);
-  box-shadow: 0 0 0 3px var(--tlr-green-ring);
-}
+  const set = (key) => (value) => setForm((f) => ({ ...f, [key]: value }));
 
-.tlr-select {
-  padding-right: 40px;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path fill='none' stroke='%236b7280' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round' d='M2.5 4.5 6 8l3.5-3.5'/></svg>");
-  background-repeat: no-repeat;
-  background-position: right 16px center;
-}
-
-.tlr-textarea {
-  resize: vertical;
-  min-height: 90px;
-  line-height: 1.5;
-}
-
-/* ---------- Checkbox tiles ---------- */
-
-.tlr-fieldset {
-  margin: 0;
-  padding: 0;
-  border: 0;
-  min-width: 0;
-}
-
-.tlr-legend {
-  padding: 0;
-  margin-bottom: 10px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--tlr-text-2);
-}
-
-.tlr-check-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 10px;
-}
-
-.tlr-check {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 14px 16px;
-  border: 1px solid var(--tlr-border);
-  border-radius: var(--tlr-radius-input);
-  background: var(--tlr-bg);
-  font-size: 14px;
-  font-weight: 500;
-  line-height: 1.3;
-  color: var(--tlr-text);
-  cursor: pointer;
-  transition: border-color 120ms ease, background-color 120ms ease;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.tlr-check:hover {
-  border-color: var(--tlr-green);
-  background: var(--tlr-sunken);
-}
-
-.tlr-check input[type='checkbox'] {
-  flex: 0 0 auto;
-  width: 18px;
-  height: 18px;
-  margin: 0;
-  accent-color: var(--tlr-green);
-  cursor: pointer;
-}
-
-.tlr-check:has(input:checked) {
-  border-color: var(--tlr-green);
-  background: var(--tlr-green-soft);
-  font-weight: 600;
-  color: var(--tlr-green);
-}
-
-.tlr-check:has(input:focus-visible) {
-  outline: 2px solid var(--tlr-green);
-  outline-offset: 2px;
-}
-
-/* ---------- Actions (transparent large buttons) ---------- */
-
-.tlr-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding-top: 20px;
-  margin-top: 4px;
-  border-top: 1px solid var(--tlr-border-soft);
-}
-
-.tlr-btn {
-  width: 100%;
-  padding: 18px 24px;
-  border-radius: var(--tlr-radius-input);
-  font: inherit;
-  font-size: 16px;
-  font-weight: 700;
-  text-align: center;
-  cursor: pointer;
-  transition: background-color 120ms ease, border-color 120ms ease,
-    opacity 120ms ease;
-  box-sizing: border-box;
-}
-
-.tlr-btn--primary {
-  background: var(--tlr-green);
-  color: #ffffff;
-  border: 1px solid var(--tlr-green);
-}
-.tlr-btn--primary:hover:not(:disabled) {
-  background: var(--tlr-green-dark);
-  border-color: var(--tlr-green-dark);
-}
-
-.tlr-btn--secondary {
-  background: transparent;
-  color: var(--tlr-text);
-  border: 1.5px solid var(--tlr-border);
-}
-.tlr-btn--secondary:hover:not(:disabled) {
-  background: var(--tlr-sunken);
-  border-color: var(--tlr-text-2);
-}
-
-.tlr-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* ---------- Summary ---------- */
-
-.tlr-facts {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 24px;
-}
-
-.tlr-fact {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 0;
-}
-
-.tlr-fact-label {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--tlr-text-2);
-}
-
-.tlr-fact-value {
-  font-size: 17px;
-  font-weight: 700;
-  line-height: 1.3;
-  color: var(--tlr-text);
-  word-break: break-word;
-}
-
-.tlr-issues,
-.tlr-notes {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.tlr-small-label {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  color: var(--tlr-text-2);
-}
-
-.tlr-chip-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.tlr-chip {
-  display: inline-flex;
-  align-items: center;
-  padding: 6px 14px;
-  border-radius: var(--tlr-radius-pill);
-  background: var(--tlr-orange-soft);
-  color: var(--tlr-orange);
-  border: 1px solid var(--tlr-orange-line);
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1.4;
-  white-space: nowrap;
-}
-
-.tlr-notes p {
-  margin: 0;
-  font-size: 14px;
-  line-height: 1.6;
-  color: var(--tlr-text);
-  white-space: pre-wrap;
-}
-
-.tlr-muted {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--tlr-text-2);
-}
-
-/* ---------- Alert ---------- */
-
-.tlr-alert-error {
-  padding: 14px 16px;
-  border: 1px solid var(--tlr-danger-line);
-  border-radius: var(--tlr-radius-input);
-  background: var(--tlr-danger-soft);
-  color: var(--tlr-danger);
-  font-size: 14px;
-  font-weight: 500;
-  line-height: 1.45;
-}
-
-/* ---------- Amount picker (wrapper only) ---------- */
-
-.tlr-amount-picker {
-  display: flex;
-  align-items: stretch;
-  gap: 8px;
-}
-
-.tlr-amount-picker > *:first-child,
-.tlr-amount-picker > *:last-child {
-  flex: 0 0 auto;
-  width: 52px;
-}
-
-.tlr-amount-picker > *:nth-child(2) {
-  flex: 1 1 auto;
-  text-align: center;
-}
-
-/* ---------- Responsive ---------- */
-
-@media (max-width: 560px) {
-  .tlr-card {
-    padding: 20px;
-    border-radius: 20px;
-    gap: 20px;
+  function toggleIssue(code) {
+    setForm((f) => {
+      const current = Array.isArray(f.visibleIssues) ? f.visibleIssues : [];
+      const withoutNone = current.filter((c) => c !== 'NONE');
+      if (code === 'NONE') {
+        return {
+          ...f,
+          visibleIssues: current.includes('NONE') ? [] : ['NONE'],
+        };
+      }
+      const has = withoutNone.includes(code);
+      const next = has
+        ? withoutNone.filter((c) => c !== code)
+        : [...withoutNone, code];
+      return { ...f, visibleIssues: next.length ? next : [] };
+    });
   }
 
-  .tlr-row,
-  .tlr-check-grid,
-  .tlr-facts {
-    grid-template-columns: 1fr;
+  function captureGps() {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
+      setGpsError('Geolocation is not available in this browser.');
+      return;
+    }
+    setGpsBusy(true);
+    setGpsError('');
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude } = pos.coords;
+        set('gpsLocation')(`${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
+        setGpsBusy(false);
+      },
+      (err) => {
+        setGpsError(err?.message || 'Could not read your location.');
+        setGpsBusy(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
   }
 
-  .tlr-chip { white-space: normal; }
-}
+  async function submit(e) {
+    e.preventDefault();
+    setError('');
 
-@media (prefers-reduced-motion: reduce) {
-  .tlr-card * { transition: none !important; }
-}
+    if (form.whatLoaded === 'REFUSED_TO_LOAD') {
+      const ok = window.confirm(
+        'You are reporting REFUSED TO LOAD. This will be recorded in the pre-loading report as a refusal. Continue?'
+      );
+      if (!ok) return;
+    }
 
-@media (forced-colors: active) {
-  .tlr-check,
-  .tlr-chip,
-  .tlr-input,
-  .tlr-select,
-  .tlr-textarea,
-  .tlr-btn {
-    border-color: CanvasText;
+    if (!form.quantityLoaded || Number(form.quantityLoaded) <= 0) {
+      setError('Enter the quantity to be loaded.');
+      return;
+    }
+    if (!photos.length && !videos.length) {
+      setError(
+        'At least one photo or video of the goods/pre-loading situation is required.'
+      );
+      return;
+    }
+
+    // GPS — if provided, must match the strict lat,lng pattern.
+    const gpsTrimmed = form.gpsLocation?.trim();
+    if (gpsTrimmed && !GPS_PATTERN.test(gpsTrimmed)) {
+      setError(
+        'GPS must be in the form "latitude, longitude" (e.g. 8.980600, 38.757800). Only numbers, a decimal point, a comma, and an optional minus sign are allowed.'
+      );
+      return;
+    }
+
+    // Notes — block obvious contact info before submitting.
+    if (form.notes && containsContactInfo(form.notes)) {
+      setError(
+        'Notes cannot contain phone numbers, email addresses, or links. Please remove them and try again.'
+      );
+      return;
+    }
+
+    const arrivedAt = toIso(form.arrivedAt);
+    const loadingStartedAt = toIso(form.loadingStartedAt);
+    const loadingFinishedAt = toIso(form.loadingFinishedAt);
+
+    if (
+      arrivedAt &&
+      loadingStartedAt &&
+      new Date(arrivedAt) > new Date(loadingStartedAt)
+    ) {
+      setError('Arrival time cannot be later than the loading start time.');
+      return;
+    }
+    if (
+      loadingStartedAt &&
+      loadingFinishedAt &&
+      new Date(loadingStartedAt) > new Date(loadingFinishedAt)
+    ) {
+      setError('Loading start time cannot be later than the loading finish time.');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      await api.post(`/transport/${transportJobId}/loading-report`, {
+        whatLoaded: form.whatLoaded,
+        quantityLoaded: Number(form.quantityLoaded),
+        quantityUnit: form.quantityUnit || undefined,
+        qualityAtLoading: form.qualityAtLoading || undefined,
+        visibleIssues: form.visibleIssues,
+        arrivedAt: arrivedAt || undefined,
+        loadingStartedAt: loadingStartedAt || undefined,
+        loadingFinishedAt: loadingFinishedAt || undefined,
+        gpsLocation: gpsTrimmed || undefined,
+        notes: form.notes?.trim() || undefined,
+        photos,
+        videos,
+      });
+      await load();
+      if (onSubmitted) onSubmitted();
+    } catch (err) {
+      const data = err.response?.data;
+      setError(data?.error || 'Could not submit loading report');
+    } finally {
+      setSubmitting(false);
+    }
   }
-  .tlr-check:has(input:checked) {
-    outline: 2px solid Highlight;
-    outline-offset: -2px;
+
+  // ---- loading / error ---------------------------------------------------
+
+  if (loading) {
+    return (
+      <div className="tlr-card">
+        <p className="tlr-muted">Loading…</p>
+      </div>
+    );
   }
+
+  if (loadError) {
+    return (
+      <div className="tlr-card">
+        <div className="tlr-alert-error">{loadError}</div>
+      </div>
+    );
+  }
+
+  // ---- already submitted -------------------------------------------------
+
+  if (existing) {
+    return (
+      <div className="tlr-card">
+        <SectionHead
+          title="Pre-loading report submitted"
+          meta={fmtDateTime(existing.createdAt)}
+        />
+        <p className="tlr-muted">
+          The buyer can review this report before physical loading begins. The
+          report is immutable; corrections must go through the dispute workflow.
+        </p>
+        <TransportLoadingReportSummary
+          loadingReport={existing}
+          evidence={existingEvidence}
+        />
+      </div>
+    );
+  }
+
+  // ---- gates (mirror server) ---------------------------------------------
+
+  if (jobStatus !== 'ACCEPTED') {
+    return null; // Form is only shown when the job is awaiting pickup.
+  }
+
+  if (!paymentsReady) {
+    return (
+      <div className="tlr-card">
+        <SectionHead title="Loading report" />
+        <p className="tlr-muted">
+          The buyer must pay the transport fee before you can submit the
+          loading report.
+        </p>
+      </div>
+    );
+  }
+
+  if (!sellerConfirmed) {
+    return (
+      <div className="tlr-card">
+        <SectionHead title="Loading report" />
+        <p className="tlr-muted">
+          Waiting for the seller to confirm that the goods are prepared for
+          loading. The report cannot be submitted until then.
+        </p>
+      </div>
+    );
+  }
+
+  if (!truckArrived) {
+    return (
+      <div className="tlr-card">
+        <SectionHead title="Loading report" />
+        <p className="tlr-muted">
+          Confirm the truck is on site before submitting the report.
+        </p>
+      </div>
+    );
+  }
+
+  // ---- the form ----------------------------------------------------------
+
+  return (
+    <div className="tlr-card">
+      <SectionHead title="Loading report" meta="At the pickup site" />
+
+      <p className="tlr-muted">
+        Record what is planned to be loaded, how much, when, and the expected
+        condition. The buyer will review this report before physical loading
+        begins. Once submitted it is immutable.
+      </p>
+
+      {error && <div className="tlr-alert-error">{error}</div>}
+
+      <form className="tlr-form" onSubmit={submit}>
+        {/* ── What loaded ───────────────────────────────────────── */}
+        <label className="tlr-field">
+          <span className="tlr-label">What will be loaded</span>
+          <select
+            className="tlr-select"
+            value={form.whatLoaded}
+            onChange={(e) => set('whatLoaded')(e.target.value)}
+          >
+            {WHAT_LOADED_OPTIONS.map(([value, text]) => (
+              <option key={value} value={value}>
+                {text}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        {/* ── Quantity + unit ───────────────────────────────────── */}
+        <div className="tlr-row">
+          <label className="tlr-field">
+            <span className="tlr-label">Quantity to be loaded</span>
+            <div className="tlr-amount-picker">
+              <AmountPicker
+                reference={1}
+                min={0.01}
+                placeholder="Select the planned loading quantity"
+                value={form.quantityLoaded}
+                onChange={set('quantityLoaded')}
+                ariaLabel="Quantity to be loaded"
+              />
+            </div>
+          </label>
+          <label className="tlr-field">
+            <span className="tlr-label">Unit</span>
+            <select
+              className="tlr-select"
+              value={form.quantityUnit}
+              onChange={(e) => set('quantityUnit')(e.target.value)}
+            >
+              {UNIT_OPTIONS.map((u) => (
+                <option key={u} value={u}>
+                  {u}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        {/* ── Quality ───────────────────────────────────────────── */}
+        <label className="tlr-field">
+          <span className="tlr-label">Expected condition at loading</span>
+          <select
+            className="tlr-select"
+            value={form.qualityAtLoading}
+            onChange={(e) => set('qualityAtLoading')(e.target.value)}
+          >
+            {QUALITY_OPTIONS.map(([value, text]) => (
+              <option key={value} value={value}>
+                {text}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        {/* ── Visible issues ────────────────────────────────────── */}
+        <fieldset className="tlr-fieldset">
+          <legend className="tlr-legend">Visible issues / loading risks</legend>
+          <div className="tlr-check-grid">
+            {ISSUE_OPTIONS.map(([code, text]) => (
+              <label key={code} className="tlr-check">
+                <input
+                  type="checkbox"
+                  checked={(form.visibleIssues || []).includes(code)}
+                  onChange={() => toggleIssue(code)}
+                />
+                <span>{text}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+
+        {/* ── Times ─────────────────────────────────────────────── */}
+        <div className="tlr-row">
+          <label className="tlr-field">
+            <span className="tlr-label">Arrived at site</span>
+            <input
+              className="tlr-input"
+              type="datetime-local"
+              value={form.arrivedAt}
+              onChange={(e) => set('arrivedAt')(e.target.value)}
+            />
+          </label>
+          <label className="tlr-field">
+            <span className="tlr-label">Loading started</span>
+            <input
+              className="tlr-input"
+              type="datetime-local"
+              value={form.loadingStartedAt}
+              onChange={(e) => set('loadingStartedAt')(e.target.value)}
+            />
+          </label>
+          <label className="tlr-field">
+            <span className="tlr-label">Loading finished</span>
+            <input
+              className="tlr-input"
+              type="datetime-local"
+              value={form.loadingFinishedAt}
+              onChange={(e) => set('loadingFinishedAt')(e.target.value)}
+            />
+          </label>
+        </div>
+
+        {/* ── GPS — capture button + strict pattern ─────────────── */}
+        <div className="tlr-field">
+          <span className="tlr-label">GPS at pickup site (optional)</span>
+          <div className="tlr-gps-row">
+            <input
+              className="tlr-input"
+              type="text"
+              inputMode="decimal"
+              value={form.gpsLocation}
+              onChange={(e) => set('gpsLocation')(e.target.value)}
+              placeholder="e.g. 8.980600, 38.757800"
+              aria-describedby="tlr-gps-hint"
+            />
+            <button
+              type="button"
+              className="tlr-btn tlr-btn--secondary"
+              onClick={captureGps}
+              disabled={gpsBusy || submitting}
+            >
+              {gpsBusy
+                ? 'Reading…'
+                : form.gpsLocation
+                  ? 'Refresh location'
+                  : 'Use my location'}
+            </button>
+          </div>
+          <small id="tlr-gps-hint" className="tlr-hint">
+            Only latitude and longitude are accepted. Phone numbers and other
+            text will be rejected.
+          </small>
+          {gpsError && (
+            <small className="tlr-hint tlr-hint--error">{gpsError}</small>
+          )}
+        </div>
+
+        {/* ── Notes ─────────────────────────────────────────────── */}
+        <label className="tlr-field tlr-full">
+          <span className="tlr-label">Driver notes (optional)</span>
+          <textarea
+            className="tlr-textarea"
+            value={form.notes}
+            onChange={(e) => set('notes')(e.target.value)}
+            rows={3}
+            maxLength={2000}
+            placeholder="e.g. Loaded as inspected. No concerns on arrival."
+          />
+          <small className="tlr-hint">
+            Do not include phone numbers, email addresses, or links. Those are
+            rejected by the platform before saving.
+          </small>
+        </label>
+
+        {/* ── Media ─────────────────────────────────────────────── */}
+        <div className="tlr-field tlr-full">
+          <span className="tlr-label">
+            Photos / videos of goods and loading situation
+          </span>
+          <EvidenceUploader
+            uploadUrl={`/transport/${transportJobId}/evidence/media`}
+            disabled={submitting}
+            onUploaded={({ photoKeys, videoKeys }) => {
+              setPhotos((prev) => [...prev, ...photoKeys]);
+              setVideos((prev) => [...prev, ...videoKeys]);
+            }}
+          />
+          {(photos.length > 0 || videos.length > 0) && (
+            <p className="tlr-muted">
+              {photos.length} photo(s), {videos.length} video(s) attached. At
+              least one is required.
+            </p>
+          )}
+        </div>
+
+        {/* ── Actions ───────────────────────────────────────────── */}
+        <div className="tlr-actions">
+          <button
+            type="submit"
+            className="tlr-btn tlr-btn--primary"
+            disabled={submitting}
+          >
+            {submitting ? 'Submitting…' : 'Submit report'}
+          </button>
+          <button
+            type="button"
+            className="tlr-btn tlr-btn--secondary"
+            onClick={() => window.history.back()}
+          >
+            Cancel
+          </button>
+        </div>
+      </form>
+    </div>
+  );
 }
