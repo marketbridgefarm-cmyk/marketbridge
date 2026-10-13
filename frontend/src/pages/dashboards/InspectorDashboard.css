@@ -3,8 +3,13 @@
    Independent verification: available jobs, accepted jobs,
    evidence reports, negotiation, completed history.
 
-   Same design language as the Truck Owner Dashboard — every
-   card follows the Orders card system:
+   Theme: DEEP SEA
+   Dark teal page background (#0f3d3e family) with a soft
+   surface-light gradient. All containers (.sd-card, .sd-panel,
+   .sd-stat, .sd-tabs, .sd-table, .sd-report-modal, .sd-empty-state)
+   keep their white surfaces and light-theme text.
+
+   Card system (shared with Truck Owner Dashboard):
      sd-card-head     — eyebrow + title left, party + avatar right
      sd-card-block    — content title + tiny hairline
      content
@@ -63,11 +68,37 @@
   font-family: var(--mb-font-body, 'DM Sans', system-ui, -apple-system, Segoe UI, Roboto, sans-serif);
   -webkit-font-smoothing: antialiased;
 
+  /* ── DEEP SEA background ──────────────────────────────── */
   background:
-    radial-gradient(circle at 88% 0%,  rgba(230, 245, 236, .9), transparent 42%),
-    radial-gradient(circle at 5% 100%, rgba(231, 235, 245, .85), transparent 42%),
-    linear-gradient(180deg, #f6f8fa 0%, #eef2f5 100%);
+    /* Surface light filtering down from above */
+    radial-gradient(120% 70% at 50% -20%,
+      rgba(125, 211, 200, .22) 0%,
+      rgba(125, 211, 200, 0) 60%),
+
+    /* Refracted glow, upper-right */
+    radial-gradient(60% 55% at 88% 12%,
+      rgba(45, 145, 145, .30) 0%,
+      rgba(45, 145, 145, 0) 65%),
+
+    /* Cold current, lower-left */
+    radial-gradient(70% 60% at 5% 105%,
+      rgba(4, 32, 36, .85) 0%,
+      rgba(4, 32, 36, 0) 70%),
+
+    /* Vignette — pulls the edges into depth */
+    radial-gradient(140% 100% at 50% 40%,
+      rgba(0, 0, 0, 0) 55%,
+      rgba(0, 0, 0, .38) 100%),
+
+    /* The water body itself */
+    linear-gradient(180deg,
+      #14504f 0%,
+      #0f3d3e 40%,
+      #0a2f30 75%,
+      #071f21 100%);
+
   background-attachment: fixed;
+  background-repeat: no-repeat;
 
   padding: 32px 20px 96px;
   max-width: 1200px;
@@ -75,6 +106,63 @@
 }
 
 .sd-dashboard > section + section { margin-top: 32px; }
+
+/* ══════════════════════════════════════════════════════════
+   DEEP-SEA PAGE-LEVEL OVERRIDES
+   Only the text that lives OUTSIDE white containers is re-tinted.
+   Anything inside .sd-card / .sd-panel / .sd-empty-state /
+   .sd-report-modal / .sd-tabs / .sd-stat keeps its light-theme
+   colors (re-asserted at the bottom of this block).
+   ══════════════════════════════════════════════════════════ */
+
+/* Page headings */
+.sd-dashboard > section > h1,
+.sd-dashboard .sd-toolbar-head h1,
+.sd-dashboard .sd-toolbar-head h2,
+.sd-dashboard .sd-jobs-section-title {
+  color: #eaf6f5;
+}
+
+/* Page eyebrows — brighter aqua so they pop on teal */
+.sd-dashboard > section > .sd-eyebrow,
+.sd-dashboard .sd-toolbar-head .sd-eyebrow,
+.sd-dashboard .sd-jobs-section-head .sd-eyebrow {
+  color: #7dd3c8;
+}
+
+/* Page-level muted copy */
+.sd-dashboard .sd-muted,
+.sd-dashboard .sd-toolbar-text {
+  color: rgba(207, 232, 230, .78);
+}
+
+/* Re-assert the original dark muted inside light containers */
+.sd-dashboard .sd-card .sd-muted,
+.sd-dashboard .sd-panel .sd-muted,
+.sd-dashboard .sd-empty-state .sd-muted,
+.sd-dashboard .sd-report-modal .sd-muted,
+.sd-dashboard .sd-panel--error .sd-muted {
+  color: var(--sd-muted);
+}
+
+/* Jobs-count pill sits on dark; keep its aqua face, brighten the ring */
+.sd-dashboard .sd-jobs-count {
+  background: rgba(125, 211, 200, .14);
+  border-color: rgba(125, 211, 200, .38);
+  color: #b7ece4;
+}
+
+/* Section hairlines between page-level blocks */
+.sd-dashboard .sd-jobs-section-head {
+  border-bottom-color: rgba(125, 211, 200, .18);
+}
+
+/* Tabs float on dark — deepen the shadow slightly */
+.sd-dashboard .sd-tabs {
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, .35),
+    0 6px 20px rgba(0, 0, 0, .28);
+}
 
 /* ══════════════════════════════════════════════════════════
    TYPOGRAPHY
@@ -1117,7 +1205,7 @@
   padding: 48px 24px;
   border: 1px dashed var(--sd-line);
   border-radius: var(--sd-radius);
-  background: rgba(255, 255, 255, .7);
+  background: rgba(255, 255, 255, .94);
 }
 .sd-dashboard .sd-empty-icon {
   width: 56px;
@@ -1521,9 +1609,9 @@
   justify-content: center;
   padding: 20px;
 
-  background: rgba(13, 27, 42, .5);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  background: rgba(4, 20, 22, .68);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 
   animation: sd-backdrop-in .18s var(--sd-ease);
 }
@@ -1549,7 +1637,7 @@
 
   box-shadow:
     0 1px 2px rgba(15, 30, 45, .06),
-    0 24px 64px rgba(15, 30, 45, .28);
+    0 24px 64px rgba(0, 0, 0, .48);
 
   animation: sd-modal-in .22s var(--sd-ease);
 }
