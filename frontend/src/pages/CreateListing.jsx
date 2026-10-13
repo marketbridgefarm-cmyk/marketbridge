@@ -1,9 +1,12 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { lazy, Suspense, useState, useEffect, useCallback } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext.jsx';
 import { REGIONS as FALLBACK_REGIONS } from '../utils/ethiopianRegions';
 import './create-listing/CreateListing.css';
+
+// Leaflet is only downloaded when the seller opens the map.
+const LocationPicker = lazy(() => import('../components/LocationPicker.jsx'));
 
 export default function CreateListing() {
   const { user } = useAuth();
@@ -71,6 +74,7 @@ export default function CreateListing() {
   // showing the fallback instead of silently emptying the dropdown.
   const [regions, setRegions] = useState(FALLBACK_REGIONS);
   const [geoStatus, setGeoStatus] = useState('');
+  const [showMap, setShowMap] = useState(false);
 
   useEffect(() => {
     api.get('/listings/meta/regions')
@@ -270,10 +274,29 @@ export default function CreateListing() {
             <div><label>Woreda</label><input value={form.woreda} onChange={set('woreda')} placeholder="Optional" /></div>
             <div>
               <label>Precise location (optional)</label>
-              <button type="button" className="btn btn-light" onClick={useMyLocation}>Use my current location</button>
+              <div className="lp-actions">
+                <button type="button" className="btn btn-light" onClick={useMyLocation}>Use my current location</button>
+                <button type="button" className="btn btn-light" onClick={() => setShowMap((v) => !v)} aria-expanded={showMap}>
+                  {showMap ? 'Hide map' : 'Choose on map'}
+                </button>
+                {form.latitude && form.longitude && (
+                  <button type="button" className="btn btn-light" onClick={() => setForm((f) => ({ ...f, latitude: '', longitude: '' }))}>Clear pin</button>
+                )}
+              </div>
               {geoStatus && <p className="small muted">{geoStatus}</p>}
-              {form.latitude && form.longitude && (
-                <p className="small muted">Captured: {Number(form.latitude).toFixed(4)}, {Number(form.longitude).toFixed(4)}</p>
+              {showMap && (
+                <Suspense fallback={<p className="small muted">Loading map…</p>}>
+                  <LocationPicker
+                    latitude={form.latitude}
+                    longitude={form.longitude}
+                    onChange={({ latitude, longitude }) => setForm((f) => ({ ...f, latitude, longitude }))}
+                  />
+                </Suspense>
+              )}
+              {form.latitude && form.longitude ? (
+                <p className="small muted">Pin set: {Number(form.latitude).toFixed(4)}, {Number(form.longitude).toFixed(4)}. Buyers see an approximate area, not this exact spot.</p>
+              ) : (
+                <p className="small muted">No pin yet. A pin helps buyers find your produce on the map.</p>
               )}
             </div>
             {category === 'AGRICULTURAL' && (
