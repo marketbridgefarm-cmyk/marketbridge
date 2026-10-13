@@ -49,6 +49,23 @@ const {
   LIMIT_MESSAGE,
 } = require('../services/releaseLimitsService');
 
+// ============================================================================
+// INSPECTOR COORDINATION WINDOW
+// ----------------------------------------------------------------------------
+// From the moment the price is agreed (quote ACCEPTED) the inspector has 3
+// hours to submit their coordination handoff. If they don't, the agreement
+// lapses and the request returns to the open bidding pool. Overridable via
+// env for testing / policy tuning.
+// ============================================================================
+const INSPECTOR_COORDINATION_WINDOW_HOURS = (() => {
+  const configured = Number(process.env.INSPECTOR_COORDINATION_WINDOW_HOURS);
+  return Number.isFinite(configured) && configured > 0 ? configured : 3;
+})();
+
+function computeInspectorCoordinationDueAt() {
+  return new Date(Date.now() + INSPECTOR_COORDINATION_WINDOW_HOURS * 60 * 60 * 1000);
+}
+
 const {
   applyProviderCancellation,
   assertProviderCanBid,
@@ -345,11 +362,6 @@ router.post(
 
 // ============================================================================
 // CANCEL INSPECTION REQUEST
-// ----------------------------------------------------------------------------
-// Only an in-flight payment blocks cancellation. A settled payment is
-// refunded through the normal Chapa flow; the requester is never held
-// hostage by the inspector. The refund is queued inside the same
-// transaction that marks the request CANCELLED.
 // ============================================================================
 
 router.patch('/:id/cancel', authenticate, async (req, res) => {
@@ -450,6 +462,7 @@ router.patch('/:id/reopen-bidding', authenticate, requireRole('ADMIN'), requireM
           lockedBuyerFeeAmount: null,
           lockedSellerFeeAmount: null,
           workflowDueAt: computeInspectionWorkflowDueAt(),
+          coordinationDueAt: null,
           startDueAt: null,
           completionDueAt: null,
           startedAt: null,
@@ -500,10 +513,6 @@ router.get('/inspectors', authenticate, async (req, res) => {
 
 // ============================================================================
 // AVAILABLE INSPECTION REQUESTS
-// ----------------------------------------------------------------------------
-// FIXED: Jobs remain visible even after an inspector is ACCEPTED.
-// The list uses a strict `select` to hide sensitive financial data (fee).
-// Quotes are filtered to only show the calling inspector's own bids (sealed).
 // ============================================================================
 
 router.get(
@@ -517,11 +526,8 @@ router.get(
       const requests = await prisma.inspectionRequest.findMany({
         where: {
           ...(location ? { location: { contains: location, mode: 'insensitive' } } : {}),
-          // Keep job visible until completed, cancelled, or disputed.
-          // This allows new inspectors to bid while work is in progress.
           status: { in: ['REQUESTED', 'ACCEPTED', 'IN_PROGRESS'] },
         },
-        // FIXED: Explicitly select only non-sensitive fields
         select: {
           id: true,
           orderId: true,
@@ -531,18 +537,15 @@ router.get(
           location: true,
           workDetails: true,
           createdAt: true,
-          // DO NOT SELECT: fee, lockedFee, buyerFeeAmount, sellerFeeAmount
           listing: {
             select: { id: true, cropType: true, title: true, quantity: true, unit: true, location: true, category: true },
           },
           requestedBy: {
             select: { id: true, name: true, rating: true },
           },
-          // Provide the active inspector's name, but NOT their fee
           inspector: {
             select: { id: true, name: true, rating: true },
           },
-          // FIXED: Only return the quotes belonging to the calling inspector (Sealed Bid)
           quotes: {
             where: {
               inspectorId: req.user.id,
@@ -570,10 +573,6 @@ router.get(
 
 // ============================================================================
 // INSPECTOR SUBMITS QUOTE
-// ----------------------------------------------------------------------------
-// FIXED: Quoting is allowed while the request is REQUESTED, ACCEPTED, or
-// IN_PROGRESS. Waiting bids stay visible until the report is submitted
-// (COMPLETED) or the request is cancelled. This creates a waiting list.
 // ============================================================================
 
 router.post(
@@ -611,7 +610,6 @@ router.post(
 
       await assertProviderCanBid(prisma, req.user.id);
 
-      // FIXED: Only block if the inspection is completely done or cancelled.
       if (['COMPLETED', 'CANCELLED', 'DISPUTED'].includes(request.status)) {
         return res.status(400).json({ error: 'This inspection is no longer accepting quotes' });
       }
@@ -662,7 +660,7 @@ router.post(
             inspectorId: req.user.id,
             amount: Number(req.body.amount),
             message: req.body.message || null,
-            status: 'PENDING', // New quotes after acceptance remain PENDING (Waiting List)
+            status: 'PENDING',
             expiresAt: quoteExpiry(),
           },
           include: {
@@ -885,6 +883,9 @@ router.patch(
 
 // ============================================================================
 // ACCEPT INSPECTION QUOTE
+// ----------------------------------------------------------------------------
+// FIXED: sets coordinationDueAt on accept so the inspector has 3 hours to
+// share their coordination handoff. See INSPECTOR_COORDINATION_WINDOW_HOURS.
 // ============================================================================
 
 router.patch(
@@ -926,9 +927,8 @@ router.patch(
         }
 
         const sellerConfirmationDueAt = computeSellerConfirmationDueAt();
-        
-        // This update claims the job for the ACTIVE inspector.
-        // New waiting bids will still be allowed because the GET /available and POST /quote routes are open.
+        const coordinationDueAt = computeInspectorCoordinationDueAt();
+
         const claim = await tx.inspectionRequest.updateMany({
           where: {
             id: request.id,
@@ -943,11 +943,17 @@ router.patch(
             sellerFeeAmount: request.feePayer === 'BUYER' ? null : request.feePayer === 'SPLIT' ? Math.round((finalAmount - Math.round(finalAmount * 50) / 100) * 100) / 100 : finalAmount,
             status: 'ACCEPTED',
             workflowDueAt: sellerConfirmationDueAt,
+            // FIXED: inspector's 3-hour handoff window. Cleared by the lapse
+            // flow (which reassigns the request); the seller-confirm and
+            // coordination GET routes lazily lapse when this passes without
+            // an inspectorSubmittedAt.
+            coordinationDueAt,
             startDueAt: null,
             completionDueAt: null,
             startedAt: null,
             completedAt: null,
             sellerConfirmedAt: null,
+            inspectorOnSiteConfirmedAt: null,
             sellerMessage: null,
             sellerMessageAt: null,
           },
@@ -988,6 +994,7 @@ router.patch(
               amount: String(finalAmount),
               sellerConfirmed: false,
               deadline: sellerConfirmationDueAt.toISOString(),
+              coordinationDueAt: coordinationDueAt.toISOString(),
             },
           });
         }
@@ -997,7 +1004,13 @@ router.patch(
           action: 'INSPECTION_QUOTE_ACCEPTED',
           resourceType: 'InspectionQuote',
           resourceId: acceptedQuote.id,
-          metadata: { inspectionRequestId: request.id, inspectorId: acceptedQuote.inspectorId, acceptedBy: actorRole, amount: finalAmount },
+          metadata: {
+            inspectionRequestId: request.id,
+            inspectorId: acceptedQuote.inspectorId,
+            acceptedBy: actorRole,
+            amount: finalAmount,
+            coordinationDueAt: coordinationDueAt.toISOString(),
+          },
         });
 
         return acceptedQuote;
@@ -1287,6 +1300,7 @@ router.patch(
               sellerConfirmedAt: null,
               inspectorOnSiteConfirmedAt: null,
               workflowDueAt: computeInspectionWorkflowDueAt(),
+              coordinationDueAt: null,
               startDueAt: null,
               completionDueAt: null,
               startedAt: null,
@@ -1519,7 +1533,7 @@ router.patch('/:id/accept', authenticate, requireRole('INSPECTOR'), async (req, 
 });
 
 // ============================================================================
-// Seller review queue: the seller must confirm before the inspector can start.
+// Seller review queue
 // ============================================================================
 
 router.get('/seller-pending', authenticate, requireRole('SELLER'), async (req, res) => {
@@ -1541,12 +1555,72 @@ router.get('/seller-pending', authenticate, requireRole('SELLER'), async (req, r
   }
 });
 
+// ============================================================================
+// SELLER CONFIRMS INSPECTOR ON-SITE (merged)
+// ----------------------------------------------------------------------------
+// Merged from the old POST /:id/seller-confirm + POST /:id/inspector-arrived
+// pair. A single seller action records both:
+//   • inspectorOnSiteConfirmedAt — the inspector physically showed up
+//   • sellerConfirmedAt          — the seller vouches for the work and
+//                                  unlocks the buyer's fee payment
+//
+// Strict prerequisite: both seller and inspector must have submitted their
+// coordination handoff before confirmation is accepted. This enforces
+// "coordination first, then confirm".
+//
+// Lazy-lapse: if the inspector's 3-hour coordination window has expired
+// without a handoff, lapse the agreement BEFORE the main transaction, so
+// the lapse actually commits rather than rolling back with the rejection.
+// ============================================================================
 router.post('/:id/seller-confirm', authenticate, requireRole('SELLER'), async (req, res) => {
   try {
+    // ── Lazy-lapse pre-check (outside the main transaction) ────────────────
+    const preCheck = await prisma.inspectionRequest.findUnique({
+      where: { id: req.params.id },
+      include: {
+        order: { select: { id: true, sellerId: true } },
+        coordination: true,
+      },
+    });
+
+    if (
+      preCheck &&
+      preCheck.status === 'ACCEPTED' &&
+      preCheck.inspectorId &&
+      preCheck.coordinationDueAt &&
+      new Date(preCheck.coordinationDueAt) <= new Date() &&
+      !preCheck.coordination?.inspectorSubmittedAt
+    ) {
+      const lapsed = await prisma.$transaction(async (tx) => {
+        return lapseInspectionAgreement(tx, {
+          inspectionRequestId: preCheck.id,
+          code: 'INSPECTOR_COORDINATION_EXPIRED',
+          actorId: null,
+          actorRole: 'SYSTEM',
+        });
+      }, { maxWait: 10000, timeout: 15000 });
+
+      if (lapsed?.lapsed) {
+        await noticeInspectionWaitingUnlocked(prisma, {
+          inspectionRequestId: preCheck.id,
+          reason: 'INSPECTOR_COORDINATION_EXPIRED',
+        }).catch(() => {});
+      }
+
+      return res.status(409).json({
+        code: 'COORDINATION_WINDOW_EXPIRED',
+        error: `The inspector did not share their arrival handoff within ${INSPECTOR_COORDINATION_WINDOW_HOURS} hours of accepting the price. The provisional agreement has expired and the request is back in the bidding pool.`,
+      });
+    }
+
+    // ── Main transaction ───────────────────────────────────────────────────
     const result = await prisma.$transaction(async (tx) => {
       const request = await tx.inspectionRequest.findUnique({
         where: { id: req.params.id },
-        include: { order: { select: { id: true, sellerId: true, status: true } } },
+        include: {
+          order: { select: { id: true, sellerId: true, status: true } },
+          coordination: true,
+        },
       });
       if (!request) throw Object.assign(new Error('Inspection request not found'), { statusCode: 404 });
       if (request.orderId) {
@@ -1558,18 +1632,29 @@ router.post('/:id/seller-confirm', authenticate, requireRole('SELLER'), async (r
       if (request.workflowDueAt && request.workflowDueAt <= new Date()) {
         throw Object.assign(new Error('The confirmation window has expired. The provisional agreement is being closed.'), { statusCode: 409 });
       }
-
       if (!request.order || request.order.sellerId !== req.user.id) {
         throw Object.assign(new Error('Only the order seller can confirm this inspection'), { statusCode: 403 });
       }
       if (request.status !== 'ACCEPTED' || !request.inspectorId) {
         throw Object.assign(new Error('Only a provisionally agreed inspection can be confirmed'), { statusCode: 409 });
       }
-      if (request.sellerConfirmedAt) {
+      if (request.sellerConfirmedAt || request.inspectorOnSiteConfirmedAt) {
         throw Object.assign(new Error('This inspection has already been confirmed'), { statusCode: 409 });
       }
       if (request.fee == null || Number(request.fee) <= 0) {
-        throw Object.assign(new Error('An agreed inspection fee is required before seller confirmation'), { statusCode: 409 });
+        throw Object.assign(new Error('An agreed inspection fee is required before confirmation'), { statusCode: 409 });
+      }
+
+      // STRICT COORDINATION PREREQUISITE
+      const coordination = request.coordination;
+      if (!coordination || coordination.supersededAt) {
+        throw Object.assign(new Error('Coordination must be opened before the inspection can be confirmed'), { statusCode: 409, code: 'COORDINATION_NOT_OPEN' });
+      }
+      if (!coordination.sellerSubmittedAt) {
+        throw Object.assign(new Error('Save your site handoff details before confirming the inspector on-site'), { statusCode: 409, code: 'COORDINATION_SELLER_INCOMPLETE' });
+      }
+      if (!coordination.inspectorSubmittedAt) {
+        throw Object.assign(new Error('Waiting for the inspector to share their arrival details. You can confirm once they have submitted their handoff.'), { statusCode: 409, code: 'COORDINATION_INSPECTOR_INCOMPLETE' });
       }
 
       const now = new Date();
@@ -1583,15 +1668,22 @@ router.post('/:id/seller-confirm', authenticate, requireRole('SELLER'), async (r
           status: 'ACCEPTED',
           inspectorId: request.inspectorId,
           sellerConfirmedAt: null,
+          inspectorOnSiteConfirmedAt: null,
         },
         data: {
+          // Both flags set atomically — the seller's single click vouches
+          // for the inspector's on-site presence AND unlocks the fee.
           sellerConfirmedAt: now,
+          inspectorOnSiteConfirmedAt: now,
+          inspectorOnSiteConfirmedBy: req.user.id,
           feeTermsLockedAt: now,
           lockedFee: request.fee,
           lockedFeePayer: request.feePayer,
           lockedBuyerFeeAmount: request.feePayer === 'SELLER' ? null : request.feePayer === 'SPLIT' ? Math.round(Number(request.fee) * 50) / 100 : request.fee,
           lockedSellerFeeAmount: request.feePayer === 'BUYER' ? null : request.feePayer === 'SPLIT' ? Math.round((Number(request.fee) - Math.round(Number(request.fee) * 50) / 100) * 100) / 100 : request.fee,
           workflowDueAt: computeInspectionPaymentDueAt(),
+          // Clear the handoff window now that the confirmation is locked in.
+          coordinationDueAt: null,
           startDueAt: null,
           sellerMessage: message || null,
           sellerMessageAt: message ? now : null,
@@ -1606,91 +1698,43 @@ router.post('/:id/seller-confirm', authenticate, requireRole('SELLER'), async (r
         action: 'INSPECTION_SELLER_CONFIRMED',
         resourceType: 'InspectionRequest',
         resourceId: request.id,
-        metadata: { inspectorId: request.inspectorId, message },
+        metadata: { inspectorId: request.inspectorId, message, inspectorOnSiteConfirmed: true },
       });
       await recordOrderEvent(tx, {
         orderId: request.orderId,
         actorId: req.user.id,
         type: 'INSPECTION_ACCEPTED',
-        metadata: { inspectionRequestId: request.id, sellerConfirmed: true, message },
+        metadata: { inspectionRequestId: request.id, sellerConfirmed: true, inspectorOnSiteConfirmed: true, message },
       });
 
-      return { sellerConfirmedAt: now.toISOString() };
+      return {
+        sellerConfirmedAt: now.toISOString(),
+        inspectorOnSiteConfirmedAt: now.toISOString(),
+      };
     });
 
     return res.json({
-      message: 'Inspection confirmed. The designated payer(s) may now pay the agreed inspection fee.',
+      message: 'Inspector confirmed on-site. The designated payer(s) may now pay the agreed inspection fee.',
       ...result,
     });
   } catch (error) {
     req.log.error({ err: error }, 'SELLER INSPECTION CONFIRM ERROR');
-    return res.status(error.statusCode || 500).json({ error: error.message || 'Could not confirm inspection' });
+    return res.status(error.statusCode || 500).json({
+      error: error.message || 'Could not confirm inspection',
+      ...(error.code ? { code: error.code } : {}),
+    });
   }
 });
 
+// ============================================================================
+// INSPECTOR ARRIVED — merged into seller-confirm (410 shim)
+// ============================================================================
+
 router.post('/:id/inspector-arrived', authenticate, requireRole('SELLER'), async (req, res) => {
-  try {
-    const result = await prisma.$transaction(async (tx) => {
-      const request = await tx.inspectionRequest.findUnique({
-        where: { id: req.params.id },
-        include: { order: { select: { id: true, sellerId: true, status: true } } },
-      });
-      if (!request) throw Object.assign(new Error('Inspection request not found'), { statusCode: 404 });
-      if (!request.order || request.order.sellerId !== req.user.id) {
-        throw Object.assign(new Error('Only the order seller can confirm inspector arrival'), { statusCode: 403 });
-      }
-      if (request.orderId) {
-        await lockOrderAndAssertNotClosed(tx, request.orderId, 'inspector arrival cannot be confirmed until that is resolved');
-      }
-      if (request.status !== 'ACCEPTED' || !request.inspectorId) {
-        throw Object.assign(new Error('Only a provisionally agreed inspection can receive an arrival confirmation'), { statusCode: 409 });
-      }
-      if (!request.sellerConfirmedAt) {
-        throw Object.assign(new Error('Confirm the inspector and fee first, then confirm the on-site arrival.'), { statusCode: 409 });
-      }
-      if (request.inspectorOnSiteConfirmedAt) {
-        throw Object.assign(new Error('Inspector arrival was already confirmed'), { statusCode: 409 });
-      }
-
-      const now = new Date();
-      const updated = await tx.inspectionRequest.updateMany({
-        where: { id: request.id, status: 'ACCEPTED', inspectorOnSiteConfirmedAt: null },
-        data: {
-          inspectorOnSiteConfirmedAt: now,
-          inspectorOnSiteConfirmedBy: req.user.id,
-        },
-      });
-      if (!updated.count) {
-        throw Object.assign(new Error('Inspection status changed before arrival could be recorded'), { statusCode: 409 });
-      }
-
-      await syncOrderPaymentObligations(tx, request.orderId);
-
-      await recordAuditEvent(tx, {
-        actorId: req.user.id,
-        action: 'INSPECTION_INSPECTOR_ARRIVED',
-        resourceType: 'InspectionRequest',
-        resourceId: request.id,
-        metadata: { inspectorId: request.inspectorId },
-      });
-      await recordOrderEvent(tx, {
-        orderId: request.orderId,
-        actorId: req.user.id,
-        type: 'INSPECTION_INSPECTOR_ARRIVED',
-        metadata: { inspectionRequestId: request.id, inspectorId: request.inspectorId },
-      });
-
-      return { inspectorOnSiteConfirmedAt: now.toISOString() };
-    }, { maxWait: 10000, timeout: 15000 });
-
-    return res.json({
-      message: 'Inspector arrival confirmed. The designated payer(s) may now pay the inspection fee.',
-      ...result,
-    });
-  } catch (error) {
-    req.log.error({ err: error }, 'INSPECTION INSPECTOR ARRIVED ERROR');
-    return res.status(error.statusCode || 500).json({ error: error.message || 'Could not confirm inspector arrival' });
-  }
+  return res.status(410).json({
+    code: 'ENDPOINT_MERGED',
+    error: 'The inspector-arrival confirmation has been merged into the seller confirmation. Use POST /inspections/:id/seller-confirm.',
+  });
 });
 
 router.post('/:id/seller-decline', authenticate, requireRole('SELLER'), async (req, res) => {
@@ -2388,6 +2432,38 @@ router.get('/:id/coordination', authenticate, async (req, res) => {
     if (!ctx) return;
 
     const { request, role } = ctx;
+
+    // ── Lazy-lapse: if the inspector's 3-hour handoff window has expired
+    //    without a handoff, close the agreement when anyone opens this page.
+    if (
+      request.status === 'ACCEPTED' &&
+      request.inspectorId &&
+      request.coordinationDueAt &&
+      new Date(request.coordinationDueAt) <= new Date() &&
+      !request.coordination?.inspectorSubmittedAt
+    ) {
+      const lapsed = await prisma.$transaction(async (tx) => {
+        return lapseInspectionAgreement(tx, {
+          inspectionRequestId: request.id,
+          code: 'INSPECTOR_COORDINATION_EXPIRED',
+          actorId: null,
+          actorRole: 'SYSTEM',
+        });
+      }, { maxWait: 10000, timeout: 15000 });
+
+      if (lapsed?.lapsed) {
+        await noticeInspectionWaitingUnlocked(prisma, {
+          inspectionRequestId: request.id,
+          reason: 'INSPECTOR_COORDINATION_EXPIRED',
+        }).catch(() => {});
+      }
+
+      return res.status(409).json({
+        code: 'COORDINATION_WINDOW_EXPIRED',
+        error: `The inspector did not share their arrival handoff within ${INSPECTOR_COORDINATION_WINDOW_HOURS} hours of accepting the price. The provisional agreement has expired.`,
+      });
+    }
+
     const coordination = request.coordination && !request.coordination.supersededAt
       ? request.coordination
       : null;
@@ -2396,6 +2472,13 @@ router.get('/:id/coordination', authenticate, async (req, res) => {
       role,
       coordination,
       availability: request.availability || [],
+      status: request.status,
+      sellerConfirmedAt: request.sellerConfirmedAt || null,
+      inspectorOnSiteConfirmedAt: request.inspectorOnSiteConfirmedAt || null,
+      inspectorId: request.inspectorId || null,
+      // FIXED: the inspector's handoff deadline. Drives the client-side
+      // countdown in both coordination components.
+      coordinationDueAt: request.coordinationDueAt || null,
     });
   } catch (error) {
     req.log.error({ err: error }, 'GET INSPECTION COORDINATION ERROR:');
