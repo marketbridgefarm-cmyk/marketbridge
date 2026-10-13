@@ -832,6 +832,14 @@ model InspectionRequest {
   // in-progress inspections are never auto-expired by maintenance.
   workflowDueAt DateTime?
 
+  // Deadline for the assigned inspector to submit their coordination handoff
+  // (share contact + arrival plan) after the price is agreed. Set at quote
+  // accept time as now() + INSPECTOR_COORDINATION_WINDOW_HOURS (default 3h).
+  // If the inspector has not set InspectionCoordination.inspectorSubmittedAt
+  // by this timestamp, lapseInspectionAgreement closes the provisional
+  // agreement and returns the request to the open bidding pool.
+  coordinationDueAt DateTime?
+
   // Accepted inspections must start within this window; in-progress
   // inspections must complete within completionDueAt.
   startDueAt DateTime?
@@ -886,6 +894,7 @@ model InspectionRequest {
   @@index([status])
   @@index([location])
   @@index([workflowDueAt])
+  @@index([coordinationDueAt])
   @@index([startDueAt])
   @@index([completionDueAt])
 }
