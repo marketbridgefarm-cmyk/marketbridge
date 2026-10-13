@@ -1696,31 +1696,35 @@
    Section XX — MarketBridge Order Protection (BuyerConfidenceCard)
    ============================================================ */
 
-.od-buyer-confidence {
-  display: flex;
-  align-items: flex-start;
-  gap: 16px;
-  padding: 20px 22px;
+/* ============================================================
+   MarketBridge Order Protection banner (BuyerConfidenceCard)
+   ============================================================ */
+
+.od-protection {
+  display: grid;
+  grid-template-columns: auto 1fr;   /* icon + body — 1fr never squeezes */
+  align-items: start;
+  column-gap: 14px;
+  row-gap: 0;
+  padding: 18px 20px;
   border-radius: 14px;
-  background: #ffffff;
   border: 1px solid #e5e7eb;
-  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
-}
-
-/* "Safe" tone — everything is fine */
-.od-buyer-confidence.is-safe {
   border-left: 4px solid #16a34a;
-  background: linear-gradient(180deg, #f6fdf9 0%, #ffffff 100%);
+  background: linear-gradient(180deg, #f6fdf9 0%, #ffffff 60%);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+  margin: 0;
 }
 
-/* "Review" tone — admin review / recovery in progress */
-.od-buyer-confidence.is-review {
-  border-left: 4px solid #d97706;
-  background: linear-gradient(180deg, #fffaf3 0%, #ffffff 100%);
+/* Amber variant — admin review / recovery in progress */
+.od-protection--review {
+  border-color: #fde68a;
+  border-left-color: #d97706;
+  background: linear-gradient(180deg, #fffaf3 0%, #ffffff 60%);
 }
 
-.od-confidence-icon {
-  flex: 0 0 auto;
+/* ---------- Icon (perfect circle, never stretches) ---------- */
+
+.od-protection-icon {
   width: 40px;
   height: 40px;
   border-radius: 50%;
@@ -1728,31 +1732,38 @@
   place-items: center;
   font-size: 20px;
   font-weight: 700;
+  line-height: 1;
   color: #ffffff;
   background: #16a34a;
-  line-height: 1;
+  align-self: start;   /* keeps it pinned to top even when body grows */
 }
 
-.od-buyer-confidence.is-review .od-confidence-icon {
+.od-protection--review .od-protection-icon {
   background: #d97706;
 }
 
-.od-confidence-main {
-  flex: 1 1 auto;
-  min-width: 0;              /* critical — lets the text wrap instead of squeezing */
+/* ---------- Body ---------- */
+
+.od-protection-body {
+  min-width: 0;        /* critical: allows text to wrap rather than squeeze */
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
 }
 
-.od-confidence-main .od-eyebrow {
-  color: #6b7280;
+.od-protection-eyebrow {
   font-size: 11px;
+  font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  color: #047857;
 }
 
-.od-confidence-main h2 {
+.od-protection--review .od-protection-eyebrow {
+  color: #b45309;
+}
+
+.od-protection-title {
   margin: 0;
   font-size: 18px;
   line-height: 1.3;
@@ -1760,53 +1771,70 @@
   color: #111827;
 }
 
-.od-confidence-main p {
-  margin: 0;
+.od-protection-text {
+  margin: 4px 0 0;
   font-size: 14px;
-  line-height: 1.5;
+  line-height: 1.55;
   color: #4b5563;
 }
 
-.od-confidence-promises {
+/* ---------- Promises as pills ---------- */
+
+.od-protection-promises {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0 0;
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 20px;
-  margin-top: 8px;
-  font-size: 13px;
-  color: #374151;
+  gap: 8px;
 }
 
-.od-confidence-promises span {
+.od-protection-promises li {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(22, 163, 74, 0.08);
+  color: #065f46;
+  font-size: 12.5px;
+  line-height: 1.2;
   white-space: nowrap;
 }
 
-.od-confidence-promises b {
-  color: #16a34a;
+.od-protection-promises li::before {
+  content: '✓';
   font-weight: 700;
+  color: #16a34a;
+  font-size: 13px;
 }
 
-.od-buyer-confidence.is-review .od-confidence-promises b {
+.od-protection--review .od-protection-promises li {
+  background: rgba(217, 119, 6, 0.10);
+  color: #92400e;
+}
+
+.od-protection--review .od-protection-promises li::before {
   color: #d97706;
 }
 
-/* Mobile: stack a bit tighter */
-@media (max-width: 480px) {
-  .od-buyer-confidence {
+/* ---------- Mobile ---------- */
+
+@media (max-width: 520px) {
+  .od-protection {
     padding: 16px;
-    gap: 12px;
+    column-gap: 12px;
+    border-radius: 12px;
   }
-  .od-confidence-icon {
+  .od-protection-icon {
     width: 32px;
     height: 32px;
     font-size: 16px;
   }
-  .od-confidence-main h2 { font-size: 16px; }
-  .od-confidence-main p { font-size: 13px; }
-  .od-confidence-promises {
+  .od-protection-title { font-size: 16px; }
+  .od-protection-text  { font-size: 13px; }
+  .od-protection-promises li {
     font-size: 12px;
-    gap: 6px 14px;
+    white-space: normal;
   }
 }
