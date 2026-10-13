@@ -391,9 +391,13 @@ router.patch(
 // ============================================================================
 // OPEN TRANSPORT JOBS (provider side)
 // ----------------------------------------------------------------------------
-// FIXED: Jobs remain visible even after a transporter is ACCEPTED.
-// The list uses a strict `select` to hide sensitive financial data (agreedAmount).
-// Quotes are filtered to only show the calling truck owner's own bids (sealed).
+// FIXED: Jobs remain visible and biddable from the moment they are requested
+// until the work is delivered or the order is closed. The old filter dropped
+// the job the moment a transport payment even existed (PENDING included), so
+// a single abandoned Chapa checkout permanently hid the job from every other
+// truck owner, contradicting the requirement that the request stays public
+// until the buyer receives the goods. Waiting bids are now null-expiry (see
+// POST /:id/quotes), which keeps the replacement pool alive for the buyer.
 // ============================================================================
 
 router.get(
@@ -405,15 +409,16 @@ router.get(
       const jobs = await prisma.transportJob.findMany({
         where: {
           method: 'HIRE_TRANSPORTER',
-          payments: {
-            none: {
-              type: 'TRANSPORT',
-              status: { in: ['PENDING', 'PROCESSING', 'PAID', 'RECONCILIATION_REQUIRED'] },
-            },
-          },
           // FIXED: Keep the job visible until completed, cancelled, or disputed.
-          // This allows new truck owners to bid while work is in progress.
+          // This allows new truck owners to bid while work is in progress and
+          // keeps the buyer's waiting list continuously replenished.
           status: { in: ['REQUESTED', 'QUOTED', 'ACCEPTED', 'PICKUP', 'IN_TRANSIT'] },
+          // FIXED: only the order's own terminal states take the job off the
+          // public list. A disputed order is paused; a cancelled or completed
+          // order is done.
+          order: {
+            status: { notIn: ['DISPUTED', 'CANCELLED', 'COMPLETED'] },
+          },
         },
         // FIXED: Explicitly select only non-sensitive fields
         select: {
@@ -1670,6 +1675,11 @@ router.patch(
 // ----------------------------------------------------------------------------
 // Quoting is allowed while the job is REQUESTED, QUOTED, ACCEPTED, PICKUP,
 // or IN_TRANSIT. Waiting bids stay visible until delivery or cancellation.
+//
+// FIXED: waiting bids are created with `expiresAt: null`. The 24h expiry
+// belongs only to the accepted, fee-paid transporter as a "go to the site"
+// deadline — it must never be applied to PENDING rows, or the buyer's
+// replacement pool would silently age out and force a fresh request.
 // ============================================================================
 
 router.post(
@@ -1792,7 +1802,10 @@ router.post(
             amount: Number(req.body.amount),
             message: req.body.message || null,
             status: 'PENDING',
-            expiresAt: quoteExpiry(),
+            // FIXED: waiting bids never expire. They live for as long as the
+            // job lives, so the buyer always has a live replacement pool if
+            // the accepted transporter walks away — no fresh request needed.
+            expiresAt: null,
           },
         });
 
@@ -2132,7 +2145,15 @@ router.patch(
 
         const updatedQuote = await tx.transportQuote.update({
           where: { id: freshQuote.id },
-          data: { status: 'ACCEPTED', amount: finalAmount },
+          data: {
+            status: 'ACCEPTED',
+            amount: finalAmount,
+            // FIXED: the 24h "go to the site" clock starts only when the
+            // transport fee is PAID (stamped by the payment success handler).
+            // Clear any inherited expiry here so accept never carries a
+            // stale deadline from the earlier negotiation window.
+            expiresAt: null,
+          },
         });
 
         await tx.transportQuote.updateMany({
@@ -2395,6 +2416,9 @@ router.post(
             status: 'COUNTERED',
             counteredBy: effectiveRole,
             message: req.body.message || freshQuote.message,
+            // NOTE: the 12h window here is a negotiation window, not a
+            // waiting-bid window. It stays as-is — it only applies to an
+            // active counter-offer thread, never to a fresh PENDING bid.
             expiresAt: quoteExpiry(12),
           },
           include: {
