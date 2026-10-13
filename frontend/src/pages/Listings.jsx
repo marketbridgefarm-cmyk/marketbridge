@@ -1,10 +1,15 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api from '../api/client';
 import ListingCard from '../components/ListingCard.jsx';
 import AdvertisementBanner from '../components/AdvertisementBanner.jsx';
 import MarketplaceActions from './listings/MarketplaceActions.jsx';
 import { REGIONS as FALLBACK_REGIONS } from '../utils/ethiopianRegions';
 import './listings/Listings.css';
+import '../components/ListingsMap.css';
+
+// Leaflet is only downloaded when someone opens the map view.
+const ListingsMap = lazy(() => import('../components/ListingsMap.jsx'));
 
 export default function Listings({ category = 'AGRICULTURAL' }) {
   const agriculture = category === 'AGRICULTURAL';
@@ -27,6 +32,9 @@ export default function Listings({ category = 'AGRICULTURAL' }) {
   const [nearMode, setNearMode] = useState(false);
   const [nearStatus, setNearStatus] = useState('');
   const [showMore, setShowMore] = useState(false);
+  const [view, setView] = useState('list');
+  const [userPosition, setUserPosition] = useState(null);
+  const navigate = useNavigate();
 
   const debounceRef = useRef(null);
 
@@ -40,6 +48,7 @@ export default function Listings({ category = 'AGRICULTURAL' }) {
     setLoading(true);
     setError('');
     setNearMode(false);
+    setUserPosition(null);
     try {
       const active = overrideFilters || filters;
       const { readyAfter, readyBy, ...rest } = active;
@@ -111,6 +120,7 @@ export default function Listings({ category = 'AGRICULTURAL' }) {
             });
             setListings(r.data.listings || []);
           }
+          setUserPosition({ lat: pos.coords.latitude, lng: pos.coords.longitude });
           setNearMode(true);
           setNearStatus('');
         } catch {
@@ -325,12 +335,27 @@ export default function Listings({ category = 'AGRICULTURAL' }) {
                   : 'Direct buyer and seller deals'}
             </span>
           </div>
+          <div className="lm-toggle" role="group" aria-label="Listing view">
+            <button type="button" aria-pressed={view === 'list'} onClick={() => setView('list')}>List</button>
+            <button type="button" aria-pressed={view === 'map'} onClick={() => setView('map')}>Map</button>
+          </div>
         </div>
+
+        {/* Map view */}
+        {!loading && view === 'map' && (
+          <Suspense fallback={<div className="ls-loading">Loading map…</div>}>
+            <ListingsMap
+              listings={listings}
+              userPosition={userPosition}
+              onOpen={(id) => navigate(`/listings/${id}`)}
+            />
+          </Suspense>
+        )}
 
         {/* Grid - Matching the new design system */}
         {loading ? (
           <div className="ls-loading">Loading marketplace…</div>
-        ) : (
+        ) : view === 'map' ? null : (
           <div className="ls-grid">
             {listings.map((l) => (
               <div key={l.id} className="ls-card-wrapper">
