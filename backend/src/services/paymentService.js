@@ -1624,6 +1624,18 @@ async function settlePaymentCore({
             data: { status: 'ACCEPTED' },
           });
 
+          // FIXED: only the accepted, fee-paid transporter gets a 24h
+          // go-to-site deadline. Waiting bids carry no deadline (they were
+          // created with expiresAt: null), so stamping this here can never
+          // affect the buyer's replacement pool. This is the ONLY place an
+          // expiresAt is written on an accepted transport quote.
+          if (payment.transportQuote?.id) {
+            await tx.transportQuote.update({
+              where: { id: payment.transportQuote.id },
+              data: { expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) },
+            });
+          }
+
           // NOTE: The waiting list is intentionally preserved here. Other
           // pending transporter quotes remain PENDING/WAITING so the buyer can
           // fall back to one of them if the active transporter withdraws or
@@ -1881,7 +1893,16 @@ async function replayDisputedPaidPayment(tx, paymentId) {
           where: { id: job.id },
           data: { status: 'ACCEPTED' },
         });
-        
+
+        // FIXED: mirror the same 24h go-to-site stamp on the accepted quote
+        // when a disputed payment is replayed. Waiting bids remain null-expiry.
+        if (quote.id) {
+          await tx.transportQuote.update({
+            where: { id: quote.id },
+            data: { expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) },
+          });
+        }
+
         // Waiting list is preserved here too — see the note in settlePaymentCore.
 
         const order = await tx.order.findUnique({ where: { id: job.orderId }, select: { id: true, status: true } });
