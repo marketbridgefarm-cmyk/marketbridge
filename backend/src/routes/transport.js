@@ -22,10 +22,13 @@ const { buildBuyerReportEnvelope } = require('../utils/reportContract');
 const { idempotency } = require('../middleware/idempotency');
 const { matchTrucks } = require('../services/transportMatchingService');
 
+// FIXED: added computePaymentDueAt so confirm-loading can reset the goods
+// payment deadline after the buyer approves the loading report.
 const {
   computeSellerTransportPreparationDueAt: computeSellerPreparationDueAt,
   computeBuyerDecisionDueAt,
   computeLoadingApprovalDueAt: computeBuyerLoadingDueAt,
+  computePaymentDueAt,
 } = require('../utils/orderTiming');
 const {
   AMOUNT_LIMITS,
@@ -473,6 +476,9 @@ router.get(
       const jobs = await prisma.transportJob.findMany({
         where: { truckOwnerId: req.user.id },
         include: {
+          // FIXED: expose the loading report status so the transporter's own
+          // job list reflects buyer review state without a second request.
+          loadingReport: { select: { id: true, buyerReviewStatus: true, submittedAt: true } },
           order: {
             include: {
               payments: { select: { type: true, status: true } },
@@ -1368,6 +1374,14 @@ router.post(
       // creates the goods payment obligation.
       await syncOrderPaymentObligations(prisma, job.orderId).catch(() => {});
 
+      // FIXED: reset the goods payment deadline now that goods payment
+      // has just been unlocked. Without this the order's paymentDueAt
+      // stays stale and the buyer's payment window is miscomputed.
+      await prisma.order.update({
+        where: { id: job.orderId },
+        data: { paymentDueAt: computePaymentDueAt() },
+      }).catch(() => {});
+
       return res.json({ message: 'Loading report approved. Goods payment is now unlocked. The transporter may proceed with loading once the seller payment is settled.', buyerLoadingConfirmedAt: new Date().toISOString() });
     } catch (error) {
       req.log.error({ err: error }, 'BUYER LOADING CONFIRM ERROR');
@@ -1556,6 +1570,13 @@ router.patch(
         if (next === 'IN_TRANSIT') {
           const freshOrder = await tx.order.findUnique({ where: { id: job.orderId }, select: { status: true } });
           if (freshOrder?.status === 'TRANSPORT_ARRANGED') {
+            await transitionOrderStatus(tx, job.orderId, 'TRANSPORT_ARRANGED', 'IN_TRANSIT');
+          }
+          // FIXED: if the order is still CONFIRMED (e.g. own-truck path or
+          // legacy data), walk the order through TRANSPORT_ARRANGED so the
+          // state machine's CONFIRMED -> IN_TRANSIT jump is not rejected.
+          if (freshOrder?.status === 'CONFIRMED') {
+            await transitionOrderStatus(tx, job.orderId, 'CONFIRMED', 'TRANSPORT_ARRANGED');
             await transitionOrderStatus(tx, job.orderId, 'TRANSPORT_ARRANGED', 'IN_TRANSIT');
           }
         }
