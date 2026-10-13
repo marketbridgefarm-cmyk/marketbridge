@@ -463,7 +463,12 @@ function OverviewCard({ order, title, flags, canCancel, busy, onCancel, inspecti
   // FIXED: Progress steps reflect the new physical-reality-gated flow.
   // Inspected → Decided → Transport → Loaded → Paid → Delivered → Completed.
   const transportDone = Boolean(transportJob && ['ACCEPTED', 'PICKUP', 'IN_TRANSIT', 'DELIVERED'].includes(transportJob.status));
-  const loadedDone = Boolean(transportJob?.buyerLoadingConfirmedAt) || Boolean(transportJob?.sellerPickupConfirmedAt);
+  // FIXED: "Loaded" means different things per method. Hire transport: the
+  // buyer approved the loading-prep report. Own truck: the seller confirmed
+  // pickup readiness. The old OR combined both into one and lit up early.
+  const loadedDone = transportJob?.method === 'HIRE_TRANSPORTER'
+    ? Boolean(transportJob?.buyerLoadingConfirmedAt)
+    : Boolean(transportJob?.sellerPickupConfirmedAt);
 
   const steps = [
     { label: 'Ordered', done: true },
@@ -1565,12 +1570,15 @@ function TransportCard({ order, t }) {
         )}
 
         {t.isTransporter && job.status === 'ACCEPTED' && (
+          // FIXED: pass truckArrived so the loading-report form only enables
+          // after the on-site step is complete. missingPayments is no longer
+          // part of the contract.
           <TransportLoadingReport
             transportJobId={job.id}
             jobStatus={job.status}
             sellerConfirmed={Boolean(job.sellerPickupConfirmedAt)}
             paymentsReady={t.paid}
-            missingPayments={t.missingPayments}
+            truckArrived={Boolean(job.truckArrivedAt)}
             onSubmitted={t.reload}
           />
         )}
