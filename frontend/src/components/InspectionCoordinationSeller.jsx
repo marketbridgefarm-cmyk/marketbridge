@@ -13,6 +13,11 @@ import './ProvidersCoordination.css';
 //
 // The buyer NEVER sees this component or its data. Access is enforced
 // server-side; this UI simply does not exist for non-participants.
+//
+// FIXED: this component now:
+//   • shows a live countdown for the inspector's 3-hour handoff window
+//   • owns the single "Confirm inspector on-site" action (merged from the
+//     old arrival + fee-lock steps)
 // ============================================================================
 
 const PREFERRED_CONTACT_OPTIONS = ['PHONE', 'EMAIL', 'IN_APP'];
@@ -25,6 +30,43 @@ function fmtDate(value) {
 
 function fmtSlot(slot) {
   return `${fmtDate(slot.date)} · ${slot.startTime} – ${slot.endTime}`;
+}
+
+// ── Countdown hook ──────────────────────────────────────────────────────────
+// Ticks every second until the target passes. Returns formatted components
+// ready for a `<HH>:<MM>:<SS>` display plus an `expired` flag. If `targetMs`
+// is null or undefined, the hook is inert (active: false).
+function useCountdown(targetMs) {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!targetMs) return undefined;
+    setNow(Date.now());
+    const timer = setInterval(() => {
+      const current = Date.now();
+      setNow(current);
+      if (current >= targetMs) clearInterval(timer);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [targetMs]);
+
+  if (!targetMs) {
+    return { active: false, expired: false, hours: '00', minutes: '00', seconds: '00' };
+  }
+
+  const remaining = Math.max(0, targetMs - now);
+  const totalSecs = Math.floor(remaining / 1000);
+  const hh = String(Math.floor(totalSecs / 3600)).padStart(2, '0');
+  const mm = String(Math.floor((totalSecs % 3600) / 60)).padStart(2, '0');
+  const ss = String(totalSecs % 60).padStart(2, '0');
+
+  return {
+    active: true,
+    expired: remaining <= 0,
+    hours: hh,
+    minutes: mm,
+    seconds: ss,
+  };
 }
 
 const EMPTY_FORM = {
@@ -55,6 +97,24 @@ export default function InspectionCoordinationSeller({ inspectionRequestId }) {
   const [slotBusy, setSlotBusy] = useState(false);
   const [slotError, setSlotError] = useState('');
 
+  // Confirmation + countdown state
+  const [status, setStatus] = useState(null);
+  const [sellerConfirmedAt, setSellerConfirmedAt] = useState(null);
+  const [inspectorOnSiteConfirmedAt, setInspectorOnSiteConfirmedAt] = useState(null);
+  const [coordinationDueAt, setCoordinationDueAt] = useState(null);
+  const [confirming, setConfirming] = useState(false);
+  const [confirmError, setConfirmError] = useState('');
+  const [confirmNotice, setConfirmNotice] = useState('');
+
+  const countdown = useCountdown(coordinationDueAt ? new Date(coordinationDueAt).getTime() : null);
+  const inspectorHandoffSubmitted = Boolean(inspectorSide?.inspectorSubmittedAt);
+  const countdownTone =
+    inspectorHandoffSubmitted ? 'done'
+    : countdown.expired ? 'expired'
+    : (countdown.hours === '00' && Number(countdown.minutes) < 15) ? 'danger'
+    : (countdown.hours === '00' && Number(countdown.minutes) < 60) ? 'warn'
+    : 'safe';
+
   const load = useCallback(async () => {
     setLoading(true);
     setError('');
@@ -74,7 +134,6 @@ export default function InspectionCoordinationSeller({ inspectionRequestId }) {
       });
       setSubmittedAt(row.sellerSubmittedAt || null);
 
-      // Only surface the inspector's half once they have submitted it.
       const inspectorHasSubmitted = Boolean(row.inspectorSubmittedAt);
       setInspectorSide(inspectorHasSubmitted ? {
         inspectorContactName: row.inspectorContactName || null,
@@ -90,8 +149,20 @@ export default function InspectionCoordinationSeller({ inspectionRequestId }) {
       setAvailability(
         (res.data?.availability || []).filter((s) => s.party === 'SELLER')
       );
+
+      setStatus(res.data?.status || null);
+      setSellerConfirmedAt(res.data?.sellerConfirmedAt || null);
+      setInspectorOnSiteConfirmedAt(res.data?.inspectorOnSiteConfirmedAt || null);
+      setCoordinationDueAt(res.data?.coordinationDueAt || null);
     } catch (err) {
-      setError(err.response?.data?.error || 'Could not load coordination details');
+      // A 409 with COORDINATION_WINDOW_EXPIRED means the server has already
+      // lapsed the agreement when we asked for the state. Show it cleanly
+      // rather than a raw error string.
+      if (err.response?.data?.code === 'COORDINATION_WINDOW_EXPIRED') {
+        setError(err.response?.data?.error || 'The inspector\'s handoff window has expired.');
+      } else {
+        setError(err.response?.data?.error || 'Could not load coordination details');
+      }
     } finally {
       setLoading(false);
     }
@@ -169,8 +240,6 @@ export default function InspectionCoordinationSeller({ inspectionRequestId }) {
 
   return (
     <section className="card inspection-coordination" id="inspection-coordination">
-      {/* ── Header: eyebrow + title over the 2px rule.
-             Description sits BELOW the rule, indented. ─────────────────── */}
       <header className="ic-header">
         <div className="ic-header-main">
           <span className="ic-eyebrow">INSPECTION COORDINATION</span>
@@ -188,6 +257,45 @@ export default function InspectionCoordinationSeller({ inspectionRequestId }) {
         available, and any site preparation. This is visible to the assigned
         inspector only.
       </p>
+
+      {/* ── Inspector handoff countdown ─────────────────────────────────
+             Shown while the inspector has a live 3-hour window to submit
+             their arrival details. Disappears once they have submitted or
+             once the agreement is confirmed. ─────────────────────────── */}
+      {coordinationDueAt && !sellerConfirmedAt && (
+        <div className={`ic-countdown ic-countdown--${countdownTone}`} role="status" aria-live="polite">
+          <div className="ic-countdown-label">
+            {inspectorHandoffSubmitted
+              ? 'Inspector handoff received'
+              : 'Waiting for inspector handoff'}
+          </div>
+
+          <div className="ic-countdown-clock">
+            {inspectorHandoffSubmitted ? (
+              <span className="ic-countdown-num">Submitted</span>
+            ) : countdown.expired ? (
+              <span className="ic-countdown-num">Expired</span>
+            ) : (
+              <>
+                <span className="ic-countdown-num">{countdown.hours}</span>
+                <span className="ic-countdown-sep">:</span>
+                <span className="ic-countdown-num">{countdown.minutes}</span>
+                <span className="ic-countdown-sep">:</span>
+                <span className="ic-countdown-num">{countdown.seconds}</span>
+                <span className="ic-countdown-unit">left</span>
+              </>
+            )}
+          </div>
+
+          <p className="ic-countdown-text">
+            {inspectorHandoffSubmitted
+              ? 'The inspector has shared their arrival details. You can now confirm them on-site below.'
+              : countdown.expired
+                ? 'The window has closed without a handoff. The provisional agreement has lapsed and the request returns to bidding.'
+                : 'The inspector has 3 hours from acceptance to share their arrival details. If they do not, the agreement lapses and the request returns to bidding.'}
+          </p>
+        </div>
+      )}
 
       {error && <div className="alert error">{error}</div>}
       {notice && <div className="alert success">{notice}</div>}
@@ -349,6 +457,75 @@ export default function InspectionCoordinationSeller({ inspectionRequestId }) {
             Waiting for the inspector to share their contact and arrival details.
           </p>
         )}
+      </section>
+
+      {/* ── Single "Confirm inspector on-site" action ───────────────── */}
+      <section className="ic-confirm">
+        <header>
+          <h3>Confirm inspector on-site</h3>
+          <p className="ic-sub">
+            Confirm that the inspector has arrived on site and is ready to
+            start. This vouches for the inspection and unlocks the buyer's
+            fee payment. Only available after you and the inspector have both
+            submitted your coordination handoffs.
+          </p>
+        </header>
+
+        {sellerConfirmedAt ? (
+          <p className="ic-sub">
+            <strong>✓ Confirmed on {fmtDate(sellerConfirmedAt)}.</strong>
+            {inspectorOnSiteConfirmedAt
+              ? ' The buyer can now pay the agreed inspection fee.'
+              : ''}
+          </p>
+        ) : status !== 'ACCEPTED' ? (
+          <p className="ic-sub">
+            Confirmation is available only while the inspection is awaiting
+            the seller. Current status: {status || '—'}.
+          </p>
+        ) : (
+          <>
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={
+                confirming ||
+                !submittedAt ||
+                !inspectorHandoffSubmitted
+              }
+              onClick={async () => {
+                setConfirming(true);
+                setConfirmError('');
+                setConfirmNotice('');
+                try {
+                  await api.post(`/inspections/${inspectionRequestId}/seller-confirm`);
+                  setConfirmNotice('Inspector confirmed on-site. The buyer can now pay the inspection fee.');
+                  await load();
+                } catch (err) {
+                  setConfirmError(
+                    err.response?.data?.error ||
+                    'Could not confirm inspector arrival'
+                  );
+                } finally {
+                  setConfirming(false);
+                }
+              }}
+            >
+              {confirming ? 'Confirming…' : 'Confirm inspector is on-site and ready'}
+            </button>
+
+            {(!submittedAt || !inspectorHandoffSubmitted) && (
+              <p className="ic-sub">
+                {!submittedAt
+                  ? 'Save your site handoff details above first.'
+                  : 'Waiting for the inspector to submit their arrival details.'}
+              </p>
+            )}
+          </>
+        )}
+
+        {confirmError && <div className="alert error">{confirmError}</div>}
+        {confirmNotice && <div className="alert success">{confirmNotice}</div>}
       </section>
 
       <p className="ic-footnote">
