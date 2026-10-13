@@ -1552,15 +1552,75 @@ function TransportCard({ order, t }) {
           </Section>
         )}
 
-        {(t.isSeller || t.isTransporter) &&
+        {/* FIXED: Seller needs a real button to confirm loading preparation.
+            Without it the workflow was stuck at this step with no UI: the
+            transporter's card said "waiting for the seller to confirm
+            loading preparation", but the seller had nothing to click. */}
+        {t.isSeller && job.status === 'ACCEPTED' && !job.sellerPickupConfirmedAt && (
+          <Section title="Loading preparation">
+            <p className="muted small">
+              Confirm that the goods are ready and the loading site is prepared
+              for the transporter.
+            </p>
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={t.busy === `seller-confirm-pickup-${job.id}`}
+              busy={t.busy === `seller-confirm-pickup-${job.id}`}
+              busyText="Confirming…"
+              onClick={() =>
+                t.run(
+                  `seller-confirm-pickup-${job.id}`,
+                  () => api.post(`/transport/${job.id}/seller-confirm-pickup`),
+                  'Could not confirm loading preparation'
+                )
+              }
+            >
+              Confirm loading preparation
+            </Button>
+          </Section>
+        )}
+
+        {/* FIXED: Seller needs the truck-arrival button too. The backend
+            already accepts SELLER on POST /transport/:id/truck-arrived, but
+            only the transporter dashboard exposed it in the UI. */}
+        {t.isSeller &&
           job.status === 'ACCEPTED' &&
           job.sellerPickupConfirmedAt &&
           !job.truckArrivedAt && (
             <Section title="Truck arrival">
               <p className="muted small">
-                {t.isSeller
-                  ? 'Waiting for the truck to arrive on site. Confirm arrival from the Action Center when it happens.'
-                  : 'Waiting for your truck to arrive on site. Confirm arrival from the Action Center.'}
+                Confirm that the truck has physically arrived on site and is
+                ready to load.
+              </p>
+              <Button
+                variant="primary"
+                size="sm"
+                disabled={t.busy === `seller-truck-arrived-${job.id}`}
+                busy={t.busy === `seller-truck-arrived-${job.id}`}
+                busyText="Confirming…"
+                onClick={() =>
+                  t.run(
+                    `seller-truck-arrived-${job.id}`,
+                    () => api.post(`/transport/${job.id}/truck-arrived`),
+                    'Could not confirm truck arrival'
+                  )
+                }
+              >
+                Confirm truck arrived
+              </Button>
+            </Section>
+          )}
+
+        {/* Transporter waiting hint — the actual confirm button lives on
+            their dashboard (TruckOwnerDashboard.jsx). */}
+        {t.isTransporter &&
+          job.status === 'ACCEPTED' &&
+          job.sellerPickupConfirmedAt &&
+          !job.truckArrivedAt && (
+            <Section title="Truck arrival">
+              <p className="muted small">
+                Waiting for your truck to arrive on site. Confirm arrival from the Action Center.
               </p>
             </Section>
           )}
