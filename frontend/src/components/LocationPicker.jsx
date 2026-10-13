@@ -20,6 +20,7 @@ function pinIcon() {
   });
 }
 
+
 /**
  * Tap the map to drop a pin, or drag the pin to adjust it.
  * props: latitude, longitude (strings, '' when unset), onChange({ latitude, longitude })
