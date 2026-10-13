@@ -1,1840 +1,746 @@
 /* ==========================================================================
-   OrderDetail — MarketBridge card style
-   Matched to pages/orders/Orders.css:
-   - Card eyebrow = GREEN (--card-tone), not orange.
-   - Section sub-headers (h3) = GREEN, matching .card-block-title h3.
-   - Section body content indented with clamp(16px, 13cqw, 48px).
-   - Header line = 2px; sub-header line = 1.5px; 44px accent segment.
-   - Header status pill in the section header = plain colored text.
-   - Meta row at the bottom of the overview: Created (left) + ORD code (right).
-   - Large block buttons use a 1px accent (orange) border, echoing the accent
-     segment under the card title. Primary CTAs keep their accent fill.
-   - Party badge in the header (role + name + avatar), right-aligned.
-   - Card title shrinks with card width so long names / numbers wrap cleanly.
-   - ActionCenter lead card shares the exact same card shell as the rest of
-     the page — no extra left border, no mode tint. Only the eyebrow label
-     ("Current Status") and the horizontal progress track differ.
-   Facts grid: max 3 items per column (grid-auto-flow: column, 3 rows).
-
-   NOTE ON SPECIFICITY: mb-cards.css is loaded last and every rule there is
-   prefixed with #root (1,2,0). Any rule here that must override a
-   card-button or field default is therefore also prefixed with #root so it
-   becomes (1,3,0) and out-ranks the global sheet.
+   MarketBridge Order Detail CSS
+   Design System inspired by CBE Mobile App (Deep Purple, Clean Cards, Gold)
    ========================================================================== */
 
-.order-detail-page {
-  --mb-ink: #0f172a;
-  --mb-ink-2: #334155;
-  --mb-muted: #64748b;
-  --mb-accent: #c2410c;
-  --mb-accent-ink: #9a3412;
-  --mb-accent-tint: #fff7ed;
-  --mb-accent-border: #fed7aa;
-  --mb-ok: #047857;
-  --mb-danger: #b91c1c;
-  --mb-line: #cbd5e1;
-  --mb-card: rgba(248, 251, 255, 0.95);
-  --mb-radius-card: 22px;
-  --mb-radius-field: 16px;
-
-  background: linear-gradient(135deg, #eef0ff 0%, #dbe8f8 55%, #e6f6ee 100%);
-  min-height: 100vh;
-  min-height: 100dvh;
-  -webkit-text-size-adjust: 100%;
-  text-size-adjust: 100%;
-  padding-bottom: 64px;
+:root {
+  /* Brand Colors */
+  --primary: #5A2D82;
+  --primary-dark: #462166;
+  --primary-light: #F3E8FF;
+  
+  /* Backgrounds */
+  --bg-page: #F5F6F8;
+  --surface: #FFFFFF;
+  --surface-dark: #1A1A1A;
+  
+  /* Text Colors */
+  --text-main: #1F2937;
+  --text-muted: #6B7280;
+  --text-inverse: #FFFFFF;
+  --text-gold: #D4AF37;
+  
+  /* Status Colors */
+  --success: #10B981;
+  --success-bg: #D1FAE5;
+  --danger: #EF4444;
+  --danger-bg: #FEE2E2;
+  --warning: #F59E0B;
+  --warning-bg: #FEF3C7;
+  --info: #3B82F6;
+  --info-bg: #DBEAFE;
+  
+  /* UI Elements */
+  --border-color: #E5E7EB;
+  --radius-card: 16px;
+  --radius-btn: 8px;
+  --radius-pill: 9999px;
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
 }
 
-/* --------------------------------------------------------------------------
-   Page bar / Back link
-   -------------------------------------------------------------------------- */
-
-.order-detail-page .page-bar {
-  margin-bottom: 16px;
-  gap: 12px;
-}
-
-.order-detail-page .back-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 0;
-  background: transparent;
-  border: none;
-  color: var(--mb-ink-2);
-  font-size: 15px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: color 0.15s ease;
-}
-
-.order-detail-page .back-link:hover { color: var(--mb-accent); }
-
-/* --------------------------------------------------------------------------
-   Card shell — identical to .order-card in Orders
-   -------------------------------------------------------------------------- */
-
-.order-detail-page .card {
-  container-type: inline-size;
-  position: relative;
+/* Base Reset */
+* {
   box-sizing: border-box;
-  display: block;
-  width: 100%;
-  max-width: none;
+}
+
+body {
+  background-color: var(--bg-page);
+  color: var(--text-main);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   margin: 0;
-  padding: 24px;
-  background: var(--mb-card);
-  border: none;
-  border-radius: var(--mb-radius-card);
-  box-shadow: 0 8px 30px rgba(15, 23, 42, 0.08);
-  --card-tone: var(--mb-ok);
+  line-height: 1.5;
 }
 
-.order-detail-page .card > * {
-  box-sizing: border-box;
-  width: 100%;
-  max-width: none;
-  min-width: 0;
+/* Layout & Containers */
+.order-detail-page {
+  padding: 24px 16px 80px; /* Bottom padding for FAB */
 }
 
-/* Left-border tone variants (used by Dispute / Inspector next-step cards) */
-.order-detail-page .card.od-card-warning {
-  border-left: 4px solid var(--mb-danger);
-  padding-left: 20px;
-  --card-tone: var(--mb-danger);
+.container-narrow {
+  max-width: 1000px;
+  margin: 0 auto;
 }
 
-.order-detail-page .card.od-card-accent {
-  border-left: 4px solid var(--mb-accent);
-  padding-left: 20px;
-  --card-tone: var(--mb-accent);
+.od-page-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+  margin-top: 20px;
 }
 
-/* --------------------------------------------------------------------------
-   Card head — same treatment as .order-card-head
-   -------------------------------------------------------------------------- */
+@media (min-width: 768px) {
+  .od-page-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .od-span-all {
+    grid-column: 1 / -1;
+  }
+}
 
-.od-card-head {
-  position: relative;
+/* Utility Classes */
+.muted { color: var(--text-muted); }
+.small { font-size: 0.875rem; }
+.od-mt-6 { margin-top: 6px; }
+.od-mt-8 { margin-top: 8px; }
+.od-mt-12 { margin-top: 12px; }
+
+/* Page Bar */
+.page-bar {
   display: flex;
-  flex-wrap: nowrap;
-  align-items: flex-start;
   justify-content: space-between;
-  gap: 12px 16px;
-  padding: 0 0 10px;
-  margin: 0 0 20px;
-  border-bottom: 2px solid var(--mb-line);
+  align-items: center;
+  margin-bottom: 16px;
 }
 
-.od-card-head::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  bottom: -2px;
-  width: 44px;
-  height: 4px;
-  background: var(--mb-accent);
-}
-
-.od-card-head-main {
-  flex: 1 1 0;
-  min-width: 0;
-}
-
-.od-card-head-side {
-  flex: none;
-  align-self: flex-start;
-  margin-left: auto;
+.back-link {
+  background: none;
+  border: none;
+  color: var(--primary);
+  font-weight: 600;
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 8px 0;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 4px;
 }
 
-/* --------------------------------------------------------------------------
-   Eyebrow — GREEN, matching .order-card .eyebrow
-   -------------------------------------------------------------------------- */
+/* Cards */
+.card {
+  background: var(--surface);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-sm);
+  padding: 24px;
+  border: 1px solid rgba(0, 0, 0, 0.02);
+  transition: box-shadow 0.2s ease;
+}
+
+.card:hover {
+  box-shadow: var(--shadow-md);
+}
+
+/* Special Overview Card (Dark Theme like the Bank App) */
+.od-card-overview {
+  background: var(--surface-dark);
+  color: var(--text-inverse);
+  border: none;
+  position: relative;
+  overflow: hidden;
+}
+
+.od-card-overview::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; height: 100%;
+  background: linear-gradient(135deg, rgba(90, 45, 130, 0.4) 0%, rgba(0,0,0,0) 100%);
+  pointer-events: none;
+}
+
+.od-card-overview .od-eyebrow {
+  color: var(--text-gold);
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 1px;
+  font-weight: 700;
+}
+
+.od-card-overview .od-card-title {
+  color: var(--text-inverse);
+  font-size: 1.5rem;
+  margin: 4px 0 0;
+}
+
+.od-card-overview .od-card-subtitle {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* Card Headers */
+.od-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.od-card-overview .od-card-head {
+  border-bottom-color: rgba(255, 255, 255, 0.1);
+}
 
 .od-eyebrow {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin: 0 0 8px;
-  color: var(--card-tone, var(--mb-ok));
-  font-size: 13px;
+  font-size: 0.75rem;
   font-weight: 700;
-  letter-spacing: 0.25em;
   text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--primary);
+  display: block;
+  margin-bottom: 4px;
 }
-
-.od-eyebrow::before {
-  content: "";
-  flex: none;
-  width: 16px;
-  height: 3px;
-  background: currentColor;
-  border-radius: 2px;
-}
-
-.od-eyebrow.is-selling { color: var(--mb-ok); }
-
-/* --------------------------------------------------------------------------
-   Card title + subtitle
-   Title shrinks with card width so long product names / numbers wrap cleanly
-   instead of overflowing.
-   -------------------------------------------------------------------------- */
 
 .od-card-title {
+  font-size: 1.25rem;
+  font-weight: 700;
   margin: 0;
-  color: var(--mb-ink);
-  font-size: clamp(17px, 4.6cqw, 20px);
-  font-weight: 800;
-  line-height: 1.25;
-  overflow-wrap: anywhere;
-  word-break: break-word;
-  hyphens: auto;
+  color: var(--text-main);
 }
 
 .od-card-subtitle {
-  max-width: 60ch;
-  margin: 6px 0 0;
-  color: var(--mb-muted);
-  font-size: 14px;
-  line-height: 1.5;
-  overflow-wrap: anywhere;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  margin: 4px 0 0;
 }
 
-/* --------------------------------------------------------------------------
-   Sections — sub-header is a 1.5px line only, h3 is GREEN
-   -------------------------------------------------------------------------- */
-
+/* Sections inside cards */
 .od-card-section {
-  margin-top: 22px;
+  margin-bottom: 24px;
 }
 
-.od-card-head + .od-card-section { margin-top: 0; }
+.od-card-section:last-child {
+  margin-bottom: 0;
+}
 
 .od-card-section-head {
   display: flex;
-  align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  margin: 0 0 14px;
-  padding: 0 0 8px;
-  border-bottom: 1.5px solid var(--mb-line);
+  align-items: center;
+  margin-bottom: 12px;
 }
 
 .od-card-section-title {
+  font-size: 1rem;
+  font-weight: 600;
   margin: 0;
-  color: var(--card-tone, var(--mb-ink));
-  font-size: 15px;
-  font-weight: 700;
-  overflow-wrap: anywhere;
+  color: var(--text-main);
 }
 
 .od-card-section-meta {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--mb-ink-2);
-  font-size: 13px;
-  font-weight: 700;
-  white-space: nowrap;
+  font-size: 0.875rem;
+  color: var(--text-muted);
 }
 
 .od-card-section-meta.is-strong {
-  color: var(--mb-ink);
-  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-main);
 }
 
-/* Header status — plain colored text (matches .header-pill in Orders) */
-.od-header-status {
-  color: #475569;
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.od-header-status.is-good    { color: #047857; }
-.od-header-status.is-wait    { color: #92400e; }
-.od-header-status.is-info    { color: #1d4ed8; }
-.od-header-status.is-bad     { color: #b91c1c; }
-.od-header-status.is-neutral { color: #475569; }
-
-/* Indent section body content — matches .card-block-body indent in Orders. */
-.od-card-section > *:not(.od-card-section-head) {
-  padding-inline-start: clamp(16px, 13cqw, 48px);
-}
-
-/* Reset for grids/tables that already have their own layout. */
-.od-card-section > .od-card-grid,
-.od-card-section > .payout-table {
-  padding-inline-start: 0;
-  margin-inline-start: clamp(16px, 13cqw, 48px);
-  width: auto;
-}
-
-/* --------------------------------------------------------------------------
-   Meta row: created date (left) + ORD code (right)
-   Sits close to the details block, with clear breathing room before any
-   action button that follows.
-   -------------------------------------------------------------------------- */
-
-.od-order-meta {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  margin-top: 14px;
-  margin-bottom: 24px;
-  padding-inline-start: clamp(16px, 13cqw, 48px);
-  padding-inline-end: 14px;
-}
-
-.od-order-time {
-  min-width: 0;
-  color: var(--mb-muted);
-  font-size: 14px;
-}
-
-.od-order-code {
-  flex: none;
-  color: var(--mb-muted);
-  font-size: 14px;
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-}
-
-/* --------------------------------------------------------------------------
-   Large (block) buttons — every non-primary block button on the page uses
-   a 1px accent (orange) border, echoing the accent segment under the card
-   title. Primary CTAs keep their accent fill.
-
-   IMPORTANT: mb-cards.css is loaded last and its card-button rule is
-   `#root :is(.card, …) :is(.btn, .btn-view)` = specificity (1,2,0).
-   Every selector below MUST include #root so it becomes (1,3,0) and wins.
-   -------------------------------------------------------------------------- */
-
-#root .order-detail-page .btn-outline.btn-block,
-#root .order-detail-page .btn.btn-block:not(.btn-primary):not(.btn-danger) {
-  border: 1px solid var(--mb-accent);
-  border-radius: var(--mb-radius-field);
-  color: var(--mb-accent-ink);
-  background: transparent;
-  box-shadow: none;
-  min-height: 48px;
-  padding: 0 18px;
-  font-size: 16px;
-  font-weight: 700;
-  text-decoration: none;
-  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
-}
-
-#root .order-detail-page .btn-outline.btn-block:hover:not(:disabled),
-#root .order-detail-page .btn.btn-block:not(.btn-primary):not(.btn-danger):hover:not(:disabled) {
-  background: var(--mb-accent-tint);
-  border-color: var(--mb-accent-ink);
-  color: var(--mb-accent-ink);
-}
-
-#root .order-detail-page .btn-outline.btn-block:focus-visible,
-#root .order-detail-page .btn.btn-block:not(.btn-primary):not(.btn-danger):focus-visible {
-  outline: 3px solid var(--mb-accent-border);
-  outline-offset: 2px;
-}
-
-#root .order-detail-page .btn-outline.btn-block:disabled,
-#root .order-detail-page .btn.btn-block:not(.btn-primary):not(.btn-danger):disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
-/* --------------------------------------------------------------------------
-   Avatar / party — matches .order-avatar / .order-party-info in Orders
-   -------------------------------------------------------------------------- */
-
-.od-party-avatar {
-  flex: none;
+/* Buttons */
+.btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
-  background: #ecfdf5;
-  border: 1.5px solid #a7f3d0;
-  border-radius: 50%;
-  color: var(--mb-ok);
-  font-size: 14px;
-  font-weight: 800;
+  padding: 10px 16px;
+  border-radius: var(--radius-btn);
+  font-weight: 600;
+  font-size: 0.875rem;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  gap: 8px;
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background-color: var(--primary);
+  color: var(--text-inverse);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background-color: var(--primary-dark);
+}
+
+.btn-outline {
+  background-color: transparent;
+  border: 1px solid var(--primary);
+  color: var(--primary);
+}
+
+.btn-outline:hover:not(:disabled) {
+  background-color: var(--primary-light);
+}
+
+.btn-light {
+  background-color: #F3F4F6;
+  color: var(--text-main);
+}
+
+.btn-light:hover:not(:disabled) {
+  background-color: #E5E7EB;
+}
+
+.btn-sm {
+  padding: 8px 12px;
+  font-size: 0.8125rem;
+}
+
+.btn-block {
+  width: 100%;
+}
+
+/* Status Pills */
+.od-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
   letter-spacing: 0.02em;
+}
+
+.od-status-pill-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: currentColor;
+}
+
+.od-tone-good { background: var(--success-bg); color: var(--success); }
+.od-tone-bad { background: var(--danger-bg); color: var(--danger); }
+.od-tone-wait { background: var(--warning-bg); color: var(--warning); }
+.od-tone-info { background: var(--info-bg); color: var(--info); }
+.od-tone-neutral { background: #F3F4F6; color: var(--text-muted); }
+
+/* Order Progress Tracker */
+.order-progress {
+  display: flex;
+  justify-content: space-between;
+  list-style: none;
+  padding: 0;
+  margin: 20px 0;
+  position: relative;
+}
+
+.order-progress::before {
+  content: '';
+  position: absolute;
+  top: 10px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--border-color);
+  z-index: 1;
+}
+
+.order-progress-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  z-index: 2;
+  flex: 1;
+}
+
+.order-progress-dot {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 2px solid var(--border-color);
+  margin-bottom: 8px;
+  transition: all 0.3s ease;
+}
+
+.order-progress-step.is-done .order-progress-dot {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+
+.order-progress-step.is-current .order-progress-dot {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 4px var(--primary-light);
+}
+
+.order-progress-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-align: center;
+  font-weight: 500;
+}
+
+.order-progress-step.is-current .order-progress-label {
+  color: var(--primary);
+  font-weight: 700;
+}
+
+/* Detail Facts & Grids */
+.od-detail-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 16px;
+}
+
+.od-detail-facts > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.od-detail-facts span {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.od-detail-facts strong {
+  font-size: 0.9375rem;
+  color: var(--text-main);
+}
+
+/* Avatars & Party Badges */
+.od-party-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--primary-light);
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.875rem;
 }
 
 .od-party-avatar--sm {
   width: 28px;
   height: 28px;
-  font-size: 11px;
+  font-size: 0.75rem;
 }
 
-/* Party badge in card head: role + name on the left, avatar on the right.
-   Text is right-aligned and truncated so long names don't push the avatar. */
 .od-card-side-party {
   display: flex;
   align-items: center;
-  gap: 10px;
-}
-
-.od-card-side-party > div {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  min-width: 0;
-  max-width: 120px;
+  gap: 12px;
   text-align: right;
 }
 
 .od-card-side-label {
-  color: var(--mb-muted);
-  font-size: 13px;
-  font-weight: 700;
+  display: block;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
 }
 
 .od-card-side-value {
-  max-width: 100%;
-  overflow: hidden;
-  color: var(--mb-ink);
-  font-size: 15px;
-  font-weight: 800;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: block;
+  font-weight: 600;
+  color: var(--text-main);
 }
 
 .od-party-you {
-  display: inline-block;
+  background: var(--primary);
+  color: white;
+  font-size: 0.625rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 700;
+  text-transform: uppercase;
   margin-left: 6px;
-  padding: 2px 8px;
-  background: var(--mb-ok);
-  border-radius: 999px;
-  color: #fff;
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  vertical-align: middle;
 }
 
-/* --------------------------------------------------------------------------
-   Findings / facts — max 3 items per column, minimum 2 columns
-   - 4 items → 2 columns (3 + 1)
-   - 6 items → 2 columns (3 + 3)
-   - 7 items → 3 columns (3 + 3 + 1)
-   - 9 items → 3 columns (3 + 3 + 3)
-   -------------------------------------------------------------------------- */
-
-.od-detail-facts {
-  display: grid;
-  grid-auto-flow: column;
-  grid-template-rows: repeat(3, auto);
-  grid-auto-columns: minmax(0, 1fr);
-  gap: 14px 20px;
+/* Tables (Payout) */
+.payout-table {
   width: 100%;
+  border-collapse: collapse;
+  margin-top: 12px;
 }
 
-@container (min-width: 400px) {
-  .od-detail-facts {
-    grid-auto-columns: minmax(140px, 1fr);
-  }
+.payout-table th, .payout-table td {
+  padding: 12px 8px;
+  text-align: left;
+  border-bottom: 1px solid var(--border-color);
 }
 
-.od-detail-facts > div {
-  min-width: 0;
-}
-
-.od-detail-facts > div > span {
-  display: block;
-  color: var(--mb-muted);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
+.payout-table thead th {
+  font-size: 0.75rem;
+  color: var(--text-muted);
   text-transform: uppercase;
+  font-weight: 600;
+  border-bottom: 2px solid var(--border-color);
 }
 
-.od-detail-facts > div > strong {
-  display: block;
-  margin-top: 4px;
-  color: var(--mb-ink);
-  font-size: 15px;
-  font-weight: 800;
-  overflow-wrap: anywhere;
-}
-
-.od-finding-flag {
-  color: var(--mb-danger);
-  font-size: 14px;
-  font-weight: 700;
-}
-
-/* --------------------------------------------------------------------------
-   Status pills — identical to .status-pill in Orders
-   -------------------------------------------------------------------------- */
-
-.od-status-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 12px;
-  background: #f1f5f9;
-  border: 1.5px solid #e2e8f0;
-  border-radius: 999px;
-  color: #475569;
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 1.3;
-  white-space: nowrap;
-}
-
-.od-status-pill-dot {
-  flex: none;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: currentColor;
-}
-
-.od-tone-good {
-  background: #ecfdf5;
-  border-color: #a7f3d0;
-  color: #047857;
-}
-
-.od-tone-bad {
-  background: #fef2f2;
-  border-color: #fecaca;
-  color: #b91c1c;
-}
-
-.od-tone-wait,
-.od-tone-warn {
-  background: #fffbeb;
-  border-color: #fde68a;
-  color: #92400e;
-}
-
-.od-tone-info {
-  background: #eff6ff;
-  border-color: #bfdbfe;
-  color: #1d4ed8;
-}
-
-.od-tone-neutral {
-  background: #f1f5f9;
-  border-color: #e2e8f0;
-  color: #475569;
-}
-
-/* --------------------------------------------------------------------------
-   Actions / notices
-   -------------------------------------------------------------------------- */
-
-.od-actions {
+.payout-party-body {
   display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-top: 16px;
+  flex-direction: column;
+  gap: 4px;
 }
 
+.payout-party-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.payout-party-name {
+  font-weight: 500;
+}
+
+.payout-amount {
+  font-weight: 600;
+  font-family: monospace;
+  font-size: 1rem;
+}
+
+.payout-currency {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-left: 4px;
+}
+
+/* Notice & Alerts */
 .od-notice {
-  margin-top: 14px;
-  padding: 16px 18px;
-  background: var(--mb-accent-tint);
-  border: 1.5px solid var(--mb-accent-border);
-  border-radius: var(--mb-radius-field);
-  color: var(--mb-ink-2);
-  font-size: 14px;
-  line-height: 1.6;
+  background: var(--bg-page);
+  border-left: 4px solid var(--primary);
+  padding: 16px;
+  border-radius: 0 var(--radius-btn) var(--radius-btn) 0;
+  margin: 16px 0;
+  font-size: 0.875rem;
 }
 
-.od-notice > strong {
+.alert {
+  padding: 12px 16px;
+  border-radius: var(--radius-btn);
+  font-size: 0.875rem;
+  margin-bottom: 16px;
+}
+
+.alert.error { background: var(--danger-bg); color: var(--danger); }
+.alert.success { background: var(--success-bg); color: var(--success); }
+
+/* Forms & Inputs */
+.field, input[type="text"], select, textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-btn);
+  font-size: 0.875rem;
+  color: var(--text-main);
+  background: var(--surface);
+  transition: border-color 0.2s ease;
+}
+
+.field:focus, input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-light);
+}
+
+label {
   display: block;
-  margin-bottom: 8px;
-  color: var(--mb-accent-ink);
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-main);
+  margin-bottom: 6px;
 }
 
-/* --------------------------------------------------------------------------
-   Modal
-   -------------------------------------------------------------------------- */
+/* Order Protection Banner */
+.od-protection {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 16px;
+  padding: 20px;
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  border-left: 4px solid var(--info);
+}
 
-.od-modal-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 1200;
+.od-protection--safe { border-left-color: var(--success); }
+.od-protection--review { border-left-color: var(--warning); }
+
+.od-protection-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--bg-page);
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 24px;
-  background: rgba(15, 23, 42, 0.55);
-  backdrop-filter: blur(3px);
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.od-protection-eyebrow {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--primary);
+  letter-spacing: 0.05em;
+}
+
+.od-protection-title {
+  font-size: 1.125rem;
+  font-weight: 700;
+  margin: 4px 0 8px;
+}
+
+.od-protection-text {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+}
+
+.od-protection-promises {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.od-protection-promises li {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.od-protection-promises li::before {
+  content: '✓';
+  color: var(--success);
+  font-weight: bold;
+}
+
+/* Modals */
+.od-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 16px;
 }
 
 .od-modal {
+  background: var(--surface);
+  border-radius: var(--radius-card);
   width: 100%;
-  max-width: 640px;
-  max-height: calc(100vh - 48px);
-  overflow: auto;
-  background: #fff;
-  border-radius: var(--mb-radius-card);
-  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.24);
+  max-width: 500px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: var(--shadow-lg);
+  animation: modalIn 0.2s ease-out;
+}
+
+@keyframes modalIn {
+  from { opacity: 0; transform: translateY(20px) scale(0.95); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 .od-modal-head {
-  position: relative;
   display: flex;
-  align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 20px 24px 12px;
-  border-bottom: 2px solid var(--mb-line);
-}
-
-.od-modal-head::after {
-  content: "";
-  position: absolute;
-  left: 24px;
-  bottom: -2px;
-  width: 44px;
-  height: 4px;
-  background: var(--mb-accent);
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .od-modal-title {
-  color: var(--mb-ink);
-  font-size: 18px;
-  font-weight: 800;
-  line-height: 1.25;
+  font-size: 1.125rem;
+  font-weight: 700;
 }
 
 .od-modal-close {
-  flex: none;
-  padding: 4px 8px;
-  background: transparent;
+  background: none;
   border: none;
-  border-radius: 8px;
-  color: var(--mb-muted);
-  font-size: 24px;
-  line-height: 1;
+  font-size: 1.5rem;
+  color: var(--text-muted);
   cursor: pointer;
-  transition: background-color 0.15s ease, color 0.15s ease;
-}
-
-.od-modal-close:hover {
-  background: #f1f5f9;
-  color: var(--mb-ink);
+  line-height: 1;
 }
 
 .od-modal-body {
-  padding: 20px 24px 24px;
+  padding: 24px;
 }
 
-/* --------------------------------------------------------------------------
-   Inspection request form
-   -------------------------------------------------------------------------- */
-
-.od-inspection-work-form h3 {
-  margin: 0 0 8px;
-  color: var(--mb-ink);
-  font-size: 17px;
-  font-weight: 800;
-}
-
-.od-form-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 14px;
-  margin: 16px 0;
-}
-
-.od-quantity-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-
-.od-inspection-checks {
-  display: block;
+/* Payout Due Timer */
+.od-payout-due {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg-page);
+  padding: 12px 16px;
+  border-radius: var(--radius-btn);
   margin-top: 16px;
 }
 
-.od-inspection-checks-select {
-  width: 100%;
-  margin-top: 6px;
+.od-payout-due-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-muted);
 }
 
-/* --------------------------------------------------------------------------
-   Quote rows
-   -------------------------------------------------------------------------- */
+.od-payout-due-clock {
+  font-family: monospace;
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--primary);
+}
 
-.od-quote-actions {
+.od-payout-due-digits.is-cleared {
+  color: var(--success);
+}
+
+/* Quote / Transporter Cards */
+.transporter {
   display: flex;
-  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 16px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-btn);
+  margin-bottom: 12px;
+  background: var(--surface);
+}
+
+.transporter > div:last-child {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
   gap: 8px;
-  margin-top: 10px;
 }
 
 .od-person {
   display: flex;
   align-items: center;
-  gap: 10px;
-}
-
-/* --------------------------------------------------------------------------
-   Release agreement form
-   -------------------------------------------------------------------------- */
-
-.od-release-form {
-  display: grid;
-  gap: 10px;
-  margin-top: 10px;
-  padding: 14px 16px;
-  background: #fff;
-  border: 1.5px solid var(--mb-line);
-  border-radius: var(--mb-radius-field);
-}
-
-.od-release-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-/* --------------------------------------------------------------------------
-   Payout card — due date, dispute note, notice list
-   -------------------------------------------------------------------------- */
-
-.od-payout-due {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  flex-wrap: wrap;
-  margin-top: 18px;
-  padding-top: 14px;
-  border-top: 1.5px solid var(--mb-line);
-}
-
-.od-payout-due-label {
-  color: var(--mb-muted);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-.od-payout-due-clock {
-  display: flex;
-  align-items: baseline;
   gap: 8px;
-  font-variant-numeric: tabular-nums;
+  margin-bottom: 4px;
 }
 
-.od-payout-due-digits {
-  color: var(--mb-ink);
-  font-size: 24px;
-  font-weight: 800;
-  letter-spacing: -0.5px;
-  line-height: 1;
-}
-
-.od-payout-due-digits.is-cleared {
-  color: var(--mb-ok);
-  font-size: 16px;
-  letter-spacing: -0.2px;
-}
-
-.od-payout-due-unit {
-  color: var(--mb-muted);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-.od-payout-due-placeholder {
-  color: var(--mb-muted);
-  font-size: 14px;
-}
-
-.od-payout-dispute-note {
-  margin-top: 14px;
-  padding: 8px 0 8px 14px;
-  border-left: 3px solid #fecaca;
-  color: var(--mb-danger);
-  font-size: 13.5px;
-  line-height: 1.6;
-}
-
-.od-payout-notice {
-  margin-top: 20px;
-  padding-top: 16px;
-  border-top: 1.5px solid var(--mb-line);
-}
-
-.od-payout-notice-prefix {
-  display: block;
-  margin: 0 0 10px;
-  color: var(--mb-ok);
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-.od-payout-notice-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.od-payout-notice-item {
-  position: relative;
-  padding-left: 26px;
-  color: var(--mb-ink-2);
-  font-size: 14px;
-  line-height: 1.6;
-}
-
-.od-payout-notice-num {
-  position: absolute;
-  left: 0;
-  top: 0;
-  color: var(--mb-ok);
-  font-size: 13px;
-  font-weight: 800;
-}
-
-/* --------------------------------------------------------------------------
-   Payout table
-   -------------------------------------------------------------------------- */
-
-.order-detail-page .payout-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.order-detail-page .payout-table th,
-.order-detail-page .payout-table td {
-  padding: 12px 8px;
-  text-align: left;
-  border-bottom: 1px solid #eef1f5;
-  vertical-align: top;
-}
-
-.order-detail-page .payout-table tr:last-child th,
-.order-detail-page .payout-table tr:last-child td {
-  border-bottom: none;
-}
-
-.order-detail-page .payout-table thead th {
-  color: var(--mb-muted);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-.order-detail-page .payout-amount-col,
-.order-detail-page .payout-amount,
-.order-detail-page .payout-status-col,
-.order-detail-page .payout-status {
-  text-align: right;
-}
-
-.order-detail-page .payout-party {
-  font-weight: 400;
-  text-align: left;
-}
-
-.order-detail-page .payout-party-body {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.order-detail-page .payout-party-line {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.order-detail-page .payout-party-role {
-  color: var(--mb-muted);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-.order-detail-page .payout-party-name {
-  color: var(--mb-ink);
-  font-size: 14px;
-  font-weight: 700;
-  overflow-wrap: anywhere;
-}
-
-.order-detail-page .payout-party-note {
-  color: var(--mb-muted);
-  font-size: 12px;
-}
-
-.order-detail-page .payout-amount {
-  color: var(--mb-ink);
-  font-size: 14px;
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
-}
-
-.order-detail-page .payout-currency {
-  margin-left: 6px;
-  color: var(--mb-muted);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-/* --------------------------------------------------------------------------
-   Progress stepper — vertical on narrow, horizontal on wide
-   -------------------------------------------------------------------------- */
-
-.order-progress {
-  display: flex;
-  flex-direction: column;
-  width: fit-content;
-  min-width: min(240px, 100%);
-  max-width: 100%;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.order-progress-step {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding-bottom: 16px;
-  color: var(--mb-muted);
-  font-size: 14px;
-  font-weight: 700;
-  line-height: 18px;
-}
-
-.order-progress-step:last-child { padding-bottom: 0; }
-
-.order-progress-step::before {
-  content: "";
-  position: absolute;
-  left: 8px;
-  top: 18px;
-  bottom: 0;
-  width: 2px;
-  background: var(--mb-line);
-}
-
-.order-progress-step:last-child::before { display: none; }
-
-.order-progress-dot {
-  flex: none;
-  box-sizing: border-box;
-  width: 18px;
-  height: 18px;
-  background: #fff;
-  border: 2px solid var(--mb-line);
-  border-radius: 50%;
-}
-
-.order-progress-step.is-done { color: var(--mb-ink-2); }
-.order-progress-step.is-done::before { background: var(--mb-ok); }
-.order-progress-step.is-done .order-progress-dot {
-  background: var(--mb-ok);
-  border-color: var(--mb-ok);
-}
-
-.order-progress-step.is-current { color: var(--mb-ink); }
-.order-progress-step.is-current .order-progress-dot {
-  background: var(--mb-accent);
-  border-color: var(--mb-accent);
-  box-shadow: inset 0 0 0 3px #fff;
-}
-
-@container (min-width: 520px) {
-  .order-progress {
-    flex-direction: row;
-    width: 100%;
-  }
-
-  .order-progress-step {
-    flex: 1 1 0;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
-    padding: 0 8px 0 0;
-  }
-
-  .order-progress-step::before {
-    left: 26px;
-    right: 4px;
-    top: 8px;
-    bottom: auto;
-    width: auto;
-    height: 2px;
-  }
-}
-
-/* --------------------------------------------------------------------------
-   Buyer confidence card
-   -------------------------------------------------------------------------- */
-
-.order-detail-page .card.od-buyer-confidence {
-  display: flex;
-  align-items: flex-start;
-  gap: 18px;
-  padding: 22px 24px;
-}
-
-.od-buyer-confidence.is-safe {
-  border-left: 4px solid var(--mb-ok);
-  padding-left: 20px;
-  --card-tone: var(--mb-ok);
-}
-
-.od-buyer-confidence.is-review {
-  border-left: 4px solid var(--mb-accent);
-  padding-left: 20px;
-  --card-tone: var(--mb-accent);
-}
-
-.od-confidence-icon {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 42px;
-  height: 42px;
-  border-radius: 50%;
-  font-size: 16px;
-  font-weight: 800;
-  line-height: 1;
-}
-
-.od-buyer-confidence.is-safe .od-confidence-icon {
-  background: #ecfdf5;
-  border: 1.5px solid #a7f3d0;
-  color: var(--mb-ok);
-}
-
-.od-buyer-confidence.is-review .od-confidence-icon {
-  background: var(--mb-accent-tint);
-  border: 1.5px solid var(--mb-accent-border);
-  color: var(--mb-accent-ink);
-}
-
-.od-confidence-main {
-  flex: 1 1 0;
-  min-width: 0;
-}
-
-.od-confidence-main .od-eyebrow { margin: 0 0 6px; }
-
-.od-confidence-main h2 {
-  margin: 0 0 8px;
-  color: var(--mb-ink);
-  font-size: 18px;
-  font-weight: 800;
-  line-height: 1.3;
-}
-
-.od-confidence-main p {
-  margin: 0;
-  color: var(--mb-ink-2);
-  font-size: 14px;
-  line-height: 1.6;
-}
-
-.od-confidence-promises {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px 20px;
-  margin-top: 14px;
-  color: var(--mb-ink-2);
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.od-confidence-promises b {
-  color: var(--mb-ok);
-  margin-right: 6px;
-}
-
-/* --------------------------------------------------------------------------
-   Page grid
-   -------------------------------------------------------------------------- */
-
-.od-page-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 20px;
-  margin-top: 20px;
-}
-
-.od-page-grid > .od-span-all {
-  grid-column: 1 / -1;
-}
-
-.od-page-grid > .od-span-all > .od-card-grid {
-  display: grid;
-  gap: 20px;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-}
-
+/* Grids inside Cards */
 .od-card-grid {
   display: grid;
+  grid-template-columns: 1fr;
   gap: 16px;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
 }
 
-@media (max-width: 880px) {
-  .od-page-grid { grid-template-columns: 1fr; }
+@media (min-width: 640px) {
+  .od-card-grid {
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  }
 }
 
-/* --------------------------------------------------------------------------
-   Small helpers used by the page
-   -------------------------------------------------------------------------- */
-
-.od-mt-6  { margin-top: 6px; }
-.od-mt-8  { margin-top: 8px; }
-.od-mt-12 { margin-top: 12px; }
-
-.od-badge-inline { margin-left: 6px; }
-
-.od-field-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  align-items: center;
-  margin-top: 14px;
-}
-
-/* --------------------------------------------------------------------------
-   Flash highlight when scrolling to a section
-   -------------------------------------------------------------------------- */
-
+/* Animations */
 .od-flash {
-  animation: odFlash 1.8s ease-out;
+  animation: flashHighlight 1.8s ease-out;
 }
 
-@keyframes odFlash {
-  0%,
-  100% {
-    box-shadow: 0 8px 30px rgba(15, 23, 42, 0.08);
-  }
-  20% {
-    box-shadow:
-      0 8px 30px rgba(15, 23, 42, 0.08),
-      0 0 0 4px rgba(194, 65, 12, 0.32);
-  }
-}
-
-/* --------------------------------------------------------------------------
-   Toast
-   -------------------------------------------------------------------------- */
-
-.order-detail-toast {
-  position: fixed;
-  left: 50%;
-  bottom: 28px;
-  transform: translateX(-50%);
-  z-index: 1400;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  max-width: min(560px, calc(100vw - 32px));
-  padding: 14px 18px;
-  background: #0f172a;
-  border-radius: var(--mb-radius-field);
-  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.28);
-  color: #fff;
-  font-size: 14px;
-  line-height: 1.5;
-}
-
-.order-detail-toast-icon {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  background: var(--mb-accent);
-  border-radius: 50%;
-  color: #fff;
-  font-size: 13px;
-  font-weight: 800;
-}
-
-.order-detail-toast-message { flex: 1; }
-
-.order-detail-toast-close {
-  flex: none;
-  padding: 0 4px;
-  background: transparent;
-  border: none;
-  color: #cbd5e1;
-  font-size: 20px;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.order-detail-toast-close:hover { color: #fff; }
-
-/* ==========================================================================
-   19. ActionCenter — "Current Status" lead card (.od-next-*)
-   Uses the exact same card shell as every other card on the page
-   (22px radius, soft shadow, no extra left border, no mode tint).
-   The only differences from a normal card:
-   - eyebrow reads "Current Status"
-   - the header also renders a plain colored status text on the right
-   - the progress track is always horizontal
-   ========================================================================== */
-
-#root .order-detail-page .od-next {
-  /* Same shell as .card — nothing extra. */
-  --od-next-tone: var(--mb-accent);
-}
-
-/* ---- Header: "Current Status" (left) + live status text (right) -------- */
-
-.od-next-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 10px 12px;
-  margin: 0 0 10px;
-  padding: 0 0 10px;
-  border-bottom: 2px solid var(--mb-line);
-  position: relative;
-}
-
-.od-next-top::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  bottom: -2px;
-  width: 44px;
-  height: 4px;
-  background: var(--mb-accent);
-}
-
-/* The eyebrow keeps its green dot/dash; the label reads "Current Status" */
-.od-next .od-eyebrow {
-  color: var(--card-tone, var(--mb-ok));
-  margin: 0;
-}
-
-/* Top-right status: PLAIN colored text, no pill, no border */
-.od-next-status {
-  flex: none;
-  color: var(--mb-ink-2);
-  font-size: 13px;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.od-next-status.is-good    { color: var(--mb-ok); }
-.od-next-status.is-wait    { color: #92400e; }
-.od-next-status.is-info    { color: #1d4ed8; }
-.od-next-status.is-warn    { color: #b45309; }
-.od-next-status.is-bad     { color: var(--mb-danger); }
-.od-next-status.is-neutral { color: var(--mb-ink-2); }
-
-/* ---- Title + supporting text ------------------------------------------ */
-
-.od-next-title {
-  margin: 0;
-  color: var(--mb-ink);
-  font-size: clamp(18px, 5.2cqw, 22px);
-  font-weight: 800;
-  line-height: 1.25;
-  letter-spacing: -0.2px;
-  overflow-wrap: anywhere;
-}
-
-.od-next-text {
-  max-width: 62ch;
-  margin: 8px 0 0;
-  color: var(--mb-muted);
-  font-size: 14.5px;
-  line-height: 1.55;
-}
-
-.od-next-text[role="status"] {
-  color: var(--mb-ink-2);
-  font-weight: 700;
-}
-
-/* ---- Inline error ------------------------------------------------------ */
-
-.od-next-error {
-  margin-top: 14px;
-  padding: 12px 14px;
-  background: var(--mb-danger-bg, #fef2f2);
-  border: 1.5px solid var(--mb-danger-border, #fecaca);
-  border-radius: var(--mb-radius-field);
-  color: var(--mb-danger);
-  font-size: 13.5px;
-  line-height: 1.5;
-}
-
-/* ---- Primary CTA — full-width accent button ---------------------------- */
-
-.od-next-cta {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  box-sizing: border-box;
-  width: 100%;
-  min-height: 52px;
-  margin: 18px 0 0;
-  padding: 0 20px;
-  background: var(--mb-accent);
-  border: none;
-  border-radius: var(--mb-radius-field);
-  color: #fff;
-  font-family: inherit;
-  font-size: 16px;
-  font-weight: 800;
-  letter-spacing: 0.01em;
-  cursor: pointer;
-  transition: background-color 0.15s ease, transform 0.1s ease;
-  -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
-}
-
-.od-next-cta:hover:not(:disabled) {
-  background: var(--mb-accent-ink);
-}
-
-.od-next-cta:active:not(:disabled) {
-  transform: translateY(1px);
-}
-
-.od-next-cta:focus-visible {
-  outline: 3px solid var(--mb-accent-border);
-  outline-offset: 2px;
-}
-
-.od-next-cta:disabled {
-  opacity: 0.65;
-  cursor: not-allowed;
-}
-
-.od-next-cta-arrow {
-  display: inline-block;
-  font-size: 15px;
-  font-weight: 800;
-  transform: translateY(-1px);
-  transition: transform 0.15s ease;
-}
-
-.od-next-cta:hover:not(:disabled) .od-next-cta-arrow {
-  transform: translateY(2px);
-}
-
-/* ---- Progress track: ALWAYS horizontal (all devices) ------------------- */
-
-.od-next-track {
-  display: flex;
-  flex-direction: row;
-  align-items: flex-start;
-  margin: 22px 0 0;
-  padding: 0;
-  list-style: none;
-  gap: 0;
-  width: 100%;
-}
-
-.od-next-step {
-  position: relative;
-  flex: 1 1 0;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 0 8px 0 0;
-  color: var(--mb-muted);
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 16px;
-}
-
-.od-next-step:last-child {
-  flex: 0 0 auto;
-  padding-right: 0;
-}
-
-/* Horizontal connector line — sits between the dots, top-aligned */
-.od-next-step::before {
-  content: "";
-  position: absolute;
-  left: 26px;
-  right: 4px;
-  top: 8px;
-  height: 2px;
-  background: var(--mb-line);
-}
-.od-next-step:last-child::before { display: none; }
-
-.od-next-dot {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  box-sizing: border-box;
-  width: 18px;
-  height: 18px;
-  background: #fff;
-  border: 2px solid var(--mb-line);
-  border-radius: 50%;
-  color: #fff;
-  font-size: 11px;
-  font-weight: 900;
-  line-height: 1;
-}
-
-.od-next-step-label {
-  display: block;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.od-next-step.is-done { color: var(--mb-ink-2); }
-.od-next-step.is-done::before { background: var(--mb-ok); }
-.od-next-step.is-done .od-next-dot {
-  background: var(--mb-ok);
-  border-color: var(--mb-ok);
-}
-
-.od-next-step.is-current { color: var(--mb-ink); }
-.od-next-step.is-current .od-next-dot {
-  background: var(--mb-accent);
-  border-color: var(--mb-accent);
-  box-shadow: inset 0 0 0 3px #fff;
-}
-
-/* ---- <details> blocks: "All steps" and "Other available actions" ------- */
-
-.od-next-all {
-  margin: 20px 0 0;
-  padding: 14px 16px;
-  background: var(--mb-surface, #fff);
-  border: 1.5px solid var(--mb-line);
-  border-radius: var(--mb-radius-field);
-}
-
-.od-next-all > summary {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 0;
-  padding: 0;
-  color: var(--mb-ink);
-  font-size: 14px;
-  font-weight: 800;
-  list-style: none;
-  cursor: pointer;
-  user-select: none;
-}
-
-.od-next-all > summary::-webkit-details-marker { display: none; }
-
-.od-next-all > summary::before {
-  content: "▸";
-  display: inline-block;
-  color: var(--mb-muted);
-  font-size: 12px;
-  transition: transform 0.15s ease;
-}
-
-.od-next-all[open] > summary::before {
-  transform: rotate(90deg);
-}
-
-.od-next-all[open] > summary {
-  margin-bottom: 12px;
-  padding-bottom: 10px;
-  border-bottom: 1.5px solid var(--mb-line);
-}
-
-/* ---- Step list inside "All steps" -------------------------------------- */
-
-.od-next-list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.od-next-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 10px 12px;
-  background: transparent;
-  border-radius: var(--mb-radius-sm, 12px);
-  border: 1.5px solid transparent;
-  transition: background-color 0.15s ease, border-color 0.15s ease;
-}
-
-.od-next-item.is-current {
-  background: var(--mb-accent-tint, #fff7ed);
-  border-color: var(--mb-accent-border, #fed7aa);
-}
-
-.od-next-item.is-done {
-  opacity: 0.75;
-}
-
-.od-next-item-icon {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  background: #f1f5f9;
-  border: 1.5px solid var(--mb-line);
-  color: var(--mb-ink-2);
-  font-size: 12px;
-  font-weight: 800;
-  line-height: 1;
-}
-
-.od-next-item.is-current .od-next-item-icon {
-  background: var(--mb-accent);
-  border-color: var(--mb-accent);
-  color: #fff;
-}
-
-.od-next-item.is-done .od-next-item-icon {
-  background: var(--mb-ok);
-  border-color: var(--mb-ok);
-  color: #fff;
-}
-
-.od-next-item-body {
-  flex: 1 1 0;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.od-next-item-body strong {
-  color: var(--mb-ink);
-  font-size: 14px;
-  font-weight: 700;
-  line-height: 1.35;
-}
-
-.od-next-item-body > span {
-  color: var(--mb-muted);
-  font-size: 12.5px;
-  font-weight: 600;
-}
-
-.od-next-item.is-current .od-next-item-body > span {
-  color: var(--mb-accent-ink, #9a3412);
-}
-
-/* ---- "Go" small button on each step ------------------------------------ */
-
-.od-next-item-go {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 34px;
-  padding: 0 12px;
-  background: transparent;
-  border: 1.5px solid var(--mb-line);
-  border-radius: 999px;
-  color: var(--mb-ink-2);
-  font-family: inherit;
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.od-next-item-go:hover:not(:disabled) {
-  background: var(--mb-accent-tint, #fff7ed);
-  border-color: var(--mb-accent, #c2410c);
-  color: var(--mb-accent-ink, #9a3412);
-}
-
-.od-next-item-go:focus-visible {
-  outline: 3px solid var(--mb-accent-border, #fed7aa);
-  outline-offset: 2px;
-}
-
-.od-next-item-go:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
-/* ---- "Other available actions" list ------------------------------------ */
-
-.od-next-others {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.od-next-other {
-  min-height: 40px;
-  padding: 0 16px;
-  border-radius: var(--mb-radius-field);
-}
-
-/* ---- Responsive tweaks (progress stays horizontal on all sizes) -------- */
-
-@media (max-width: 480px) {
-  .od-next-title { font-size: 18px; }
-  .od-next-text { font-size: 14px; }
-  .od-next-cta { min-height: 48px; font-size: 15px; }
-  .od-next-status { font-size: 12px; }
-
-  /* Tighter stepper: smaller dots and labels so 4 steps still fit */
-  .od-next-track { gap: 4px; }
-  .od-next-step { font-size: 11.5px; line-height: 14px; gap: 6px; }
-  .od-next-dot { width: 16px; height: 16px; font-size: 10px; }
-  .od-next-step::before { left: 22px; top: 7px; }
-}
-
-@media (max-width: 360px) {
-  .od-next-title { font-size: 17px; }
-  .od-next-cta { font-size: 14.5px; padding: 0 14px; }
-  .od-next-step { font-size: 10.5px; line-height: 13px; }
-}
-
-/* --------------------------------------------------------------------------
-   Responsive adjustments
-   -------------------------------------------------------------------------- */
-
-@media (max-width: 480px) {
-  .order-detail-page .card {
-    padding: 18px;
-    border-radius: 18px;
-  }
-
-  .od-card-title { font-size: 17px; }
-  .od-card-subtitle { font-size: 14px; }
-  .od-card-section-title { font-size: 14.5px; }
-  .od-eyebrow { gap: 10px; letter-spacing: 0.2em; }
-  .od-eyebrow::before { width: 13px; }
-
-  .od-card-side-party > div { max-width: 90px; }
-  .od-card-side-label { font-size: 12px; }
-  .od-card-side-value { font-size: 14px; }
-
-  .od-payout-due-digits { font-size: 22px; }
-  .od-confidence-main h2 { font-size: 17px; }
-}
-
-@media (max-width: 360px) {
-  .order-detail-page .card { padding: 14px; }
-  .od-card-title { font-size: 16px; }
-  .od-card-section-title { font-size: 14px; }
-  .od-card-side-party > div { max-width: 76px; }
-}
-
-/* --------------------------------------------------------------------------
-   Reduced motion
-   -------------------------------------------------------------------------- */
-
-@media (prefers-reduced-motion: reduce) {
-  .od-flash { animation: none; }
-  .od-modal-close,
-  .order-detail-page .back-link { transition: none; }
-  .od-next-cta,
-  .od-next-cta-arrow,
-  .od-next-item,
-  .od-next-all > summary::before,
-  .od-next-item-go { transition: none; }
-  .od-next-cta:active:not(:disabled) { transform: none; }
-}
-
-
-/* ============================================================
-   Section XX — MarketBridge Order Protection (BuyerConfidenceCard)
-   ============================================================ */
-
-/* ============================================================
-   MarketBridge Order Protection banner (BuyerConfidenceCard)
-   ============================================================ */
-
-.od-protection {
-  display: grid;
-  grid-template-columns: auto 1fr;   /* icon + body — 1fr never squeezes */
-  align-items: start;
-  column-gap: 14px;
-  row-gap: 0;
-  padding: 18px 20px;
-  border-radius: 14px;
-  border: 1px solid #e5e7eb;
-  border-left: 4px solid #16a34a;
-  background: linear-gradient(180deg, #f6fdf9 0%, #ffffff 60%);
-  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
-  margin: 0;
-}
-
-/* Amber variant — admin review / recovery in progress */
-.od-protection--review {
-  border-color: #fde68a;
-  border-left-color: #d97706;
-  background: linear-gradient(180deg, #fffaf3 0%, #ffffff 60%);
-}
-
-/* ---------- Icon (perfect circle, never stretches) ---------- */
-
-.od-protection-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  font-size: 20px;
-  font-weight: 700;
-  line-height: 1;
-  color: #ffffff;
-  background: #16a34a;
-  align-self: start;   /* keeps it pinned to top even when body grows */
-}
-
-.od-protection--review .od-protection-icon {
-  background: #d97706;
-}
-
-/* ---------- Body ---------- */
-
-.od-protection-body {
-  min-width: 0;        /* critical: allows text to wrap rather than squeeze */
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.od-protection-eyebrow {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: #047857;
-}
-
-.od-protection--review .od-protection-eyebrow {
-  color: #b45309;
-}
-
-.od-protection-title {
-  margin: 0;
-  font-size: 18px;
-  line-height: 1.3;
-  font-weight: 700;
-  color: #111827;
-}
-
-.od-protection-text {
-  margin: 4px 0 0;
-  font-size: 14px;
-  line-height: 1.55;
-  color: #4b5563;
-}
-
-/* ---------- Promises as pills ---------- */
-
-.od-protection-promises {
-  list-style: none;
-  padding: 0;
-  margin: 12px 0 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.od-protection-promises li {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  border-radius: 999px;
-  background: rgba(22, 163, 74, 0.08);
-  color: #065f46;
-  font-size: 12.5px;
-  line-height: 1.2;
-  white-space: nowrap;
-}
-
-.od-protection-promises li::before {
-  content: '✓';
-  font-weight: 700;
-  color: #16a34a;
-  font-size: 13px;
-}
-
-.od-protection--review .od-protection-promises li {
-  background: rgba(217, 119, 6, 0.10);
-  color: #92400e;
-}
-
-.od-protection--review .od-protection-promises li::before {
-  color: #d97706;
-}
-
-/* ---------- Mobile ---------- */
-
-@media (max-width: 520px) {
-  .od-protection {
-    padding: 16px;
-    column-gap: 12px;
-    border-radius: 12px;
-  }
-  .od-protection-icon {
-    width: 32px;
-    height: 32px;
-    font-size: 16px;
-  }
-  .od-protection-title { font-size: 16px; }
-  .od-protection-text  { font-size: 13px; }
-  .od-protection-promises li {
-    font-size: 12px;
-    white-space: normal;
-  }
+@keyframes flashHighlight {
+  0% { box-shadow: 0 0 0 0 rgba(90, 45, 130, 0.4); }
+  50% { box-shadow: 0 0 0 10px rgba(90, 45, 130, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(90, 45, 130, 0); }
 }
