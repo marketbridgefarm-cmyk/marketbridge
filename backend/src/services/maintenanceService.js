@@ -12,11 +12,15 @@ const logger = require('../utils/logger');
 
 const { promoteNextWaitingBuyer } = require('./orderCancellationService');
 const { lapseInspectionAgreement, computeSellerConfirmationDueAt, computeInspectionPaymentDueAt } = require('./inspectionLapseService');
+// FIXED: orderTiming exports computeSellerTransportPreparationDueAt and
+// computeLoadingApprovalDueAt. They are aliased to the names used below so the
+// rest of this file is unchanged. The old un-aliased imports were undefined and
+// made backfillStep5Deadlines throw, rolling back the whole maintenance cycle.
 const {
   computeInspectionStartDueAt,
   computeBuyerDecisionDueAt,
-  computeSellerPreparationDueAt,
-  computeBuyerLoadingDueAt,
+  computeSellerTransportPreparationDueAt: computeSellerPreparationDueAt,
+  computeLoadingApprovalDueAt: computeBuyerLoadingDueAt,
 } = require('../utils/orderTiming');
 const { noticeWaitingUnlocked } = require('./waitingListService');
 
@@ -288,8 +292,6 @@ async function activateScheduledAdvertisements(now = new Date()) {
   });
   return { activated: result.count };
 }
-
-
 
 async function backfillStep5Deadlines(now = new Date()) {
   let orders = 0;
@@ -597,7 +599,7 @@ async function expireUnpaidOrders(now = new Date()) {
       await prisma.$transaction(async (tx) => {
         const current = await tx.order.findUnique({
           where: { id: candidate.id },
-          include: { transportJob: true, payments: true, listing: { select: { category: true } } },
+          include: { transportJob: true, payments: true, listing: { select: { category: true, inspectionRequired: true } } },
         });
 
         if (!current || current.status !== 'PENDING_PAYMENT' || !current.paymentDueAt || current.paymentDueAt > now) {
@@ -609,14 +611,14 @@ async function expireUnpaidOrders(now = new Date()) {
         // the generic goods-payment timer before that decision. Legacy rows
         // may still carry an old inspection-workflow deadline, so clear it.
         const inspectionRequired =
-  current.listing?.category === 'AGRICULTURAL' ||
-  current.listing?.inspectionRequired === true;
+          current.listing?.category === 'AGRICULTURAL' ||
+          current.listing?.inspectionRequired === true;
 
-if (inspectionRequired && current.buyerDecision !== 'BUY') {
-  await tx.order.update({ where: { id: current.id }, data: { paymentDueAt: null } });
-  logger.info({ orderId: current.id }, 'Cleared premature inspection-gated payment deadline before BUY decision');
-  return;
-}
+        if (inspectionRequired && current.buyerDecision !== 'BUY') {
+          await tx.order.update({ where: { id: current.id }, data: { paymentDueAt: null } });
+          logger.info({ orderId: current.id }, 'Cleared premature inspection-gated payment deadline before BUY decision');
+          return;
+        }
         if (current.payments.some((p) => p.status === 'PAID')) {
           logger.warn({ orderId: current.id }, 'Skipping auto-expire: order has a PAID payment despite PENDING_PAYMENT status');
           return;
