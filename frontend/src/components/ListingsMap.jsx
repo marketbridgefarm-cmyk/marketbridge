@@ -1,108 +1,141 @@
 /* Listings map — uses the canonical MarketBridge tokens (mb-tokens.css). */
+import { useEffect, useRef, useState } from 'react';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+import './ListingsMap.css';
 
-.lm { margin: 0 0 var(--mb-gap, 20px); }
+const DEFAULT_CENTER = [39.5, -98.35]; // continental US
+const DEFAULT_ZOOM = 4;
 
-.lm-canvas {
-  height: clamp(340px, 62vh, 620px);
-  width: 100%;
-  border: var(--mb-bw, 1.5px) solid var(--mb-line, #cbd5e1);
-  border-radius: var(--mb-radius-card, 22px);
-  box-shadow: var(--mb-shadow-card, 0 8px 30px rgba(15, 23, 42, 0.08));
-  overflow: hidden;
-  background: var(--mb-neutral-bg, #f1f5f9);
-  z-index: 0; /* keep Leaflet panes below the sticky nav and modals */
-}
+/** Teardrop pin built as a Leaflet divIcon so it inherits our tokens. */
+const pinIcon = L.divIcon({
+  className: 'lm-pin-wrap',
+  html: '<span class="lm-pin" aria-hidden="true"></span>',
+  iconSize: [28, 28],
+  iconAnchor: [14, 28],
+  popupAnchor: [0, -30],
+});
 
-@media (max-width: 480px) {
-  .lm-canvas { border-radius: 18px; height: clamp(320px, 58vh, 520px); }
-}
-
-.lm-note {
-  margin: 8px 4px 0;
-  font-size: 13px;
-  line-height: 1.45;
-  color: var(--mb-muted, #64748b);
-}
-
-/* Pin: orange teardrop with a white centre. */
-.lm-pin-wrap { background: transparent; border: 0; }
-.lm-pin {
-  display: block;
-  width: 24px;
-  height: 24px;
-  margin: 2px;
-  border-radius: 50% 50% 50% 0;
-  transform: rotate(-45deg);
-  background: var(--mb-accent, #c2410c);
-  border: 3px solid #ffffff;
-  box-shadow: 0 3px 8px rgba(15, 23, 42, 0.35);
-  position: relative;
-}
-.lm-pin::after {
-  content: '';
-  position: absolute;
-  inset: 5px;
-  border-radius: 50%;
-  background: #ffffff;
-}
-.leaflet-marker-icon:focus-visible .lm-pin,
-.leaflet-marker-icon:hover .lm-pin {
-  background: var(--mb-accent-ink, #9a3412);
-}
-.leaflet-marker-icon:focus-visible {
-  outline: var(--mb-focus-ring, 3px solid #fed7aa);
-  outline-offset: var(--mb-focus-offset, 2px);
-  border-radius: 8px;
+function popupHtml(listing) {
+  const title = listing.title ?? 'Listing';
+  const place = listing.location ?? listing.address ?? '';
+  const price = listing.price != null ? `$${Number(listing.price).toLocaleString()}` : '';
+  return `
+    <div class="lm-popup">
+      <strong>${title}</strong>
+      ${place ? `<span class="lm-muted">${place}</span>` : ''}
+      ${price ? `<span class="lm-muted">${price}</span>` : ''}
+      <button type="button" class="lm-open" data-listing-id="${listing.id}">Open listing</button>
+    </div>
+  `;
 }
 
-/* Popup */
-.lm .leaflet-popup-content-wrapper {
-  border-radius: var(--mb-radius-field, 16px);
-  border: var(--mb-bw, 1.5px) solid var(--mb-line-soft, #e2e8f0);
-  box-shadow: var(--mb-shadow-card, 0 8px 30px rgba(15, 23, 42, 0.08));
-}
-.lm .leaflet-popup-content { margin: 14px 16px; }
-.lm-popup { display: grid; gap: 4px; color: var(--mb-ink, #0f172a); font-size: 14px; }
-.lm-popup strong { font-size: 15px; }
-.lm-muted { color: var(--mb-muted, #64748b); font-size: 13px; }
-.lm-open {
-  margin-top: 8px;
-  min-height: var(--mb-touch-min, 44px);
-  border: var(--mb-bw-strong, 2px) solid var(--mb-accent, #c2410c);
-  border-radius: var(--mb-radius-sm, 12px);
-  background: var(--mb-accent, #c2410c);
-  color: #ffffff;
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
-}
-.lm-open:hover { background: var(--mb-accent-ink, #9a3412); border-color: var(--mb-accent-ink, #9a3412); }
-.lm-open:focus-visible { outline: var(--mb-focus-ring, 3px solid #fed7aa); outline-offset: var(--mb-focus-offset, 2px); }
+export default function ListingsMap({
+  listings = [],
+  onSelect,
+  center = DEFAULT_CENTER,
+  zoom = DEFAULT_ZOOM,
+  note,
+}) {
+  const containerRef = useRef(null);
+  const mapRef = useRef(null);
+  const markersRef = useRef([]);
+  const [view, setView] = useState('map'); // 'list' | 'map'
 
-/* List / Map switch (sits in the Listings toolbar) */
-.lm-toggle {
-  display: inline-flex;
-  border: var(--mb-bw, 1.5px) solid var(--mb-line, #cbd5e1);
-  border-radius: var(--mb-radius-pill, 999px);
-  overflow: hidden;
-  background: var(--mb-surface, #ffffff);
-}
-.lm-toggle button {
-  min-height: var(--mb-touch-min, 44px);
-  min-width: 72px;
-  padding: 0 16px;
-  border: 0;
-  background: transparent;
-  color: var(--mb-ink-2, #334155);
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
-}
-.lm-toggle button[aria-pressed='true'] {
-  background: var(--mb-accent, #c2410c);
-  color: #ffffff;
-}
-.lm-toggle button:focus-visible {
-  outline: var(--mb-focus-ring, 3px solid #fed7aa);
-  outline-offset: calc(var(--mb-focus-offset, 2px) * -1);
+  // Initialise the Leaflet map once.
+  useEffect(() => {
+    if (view !== 'map' || mapRef.current || !containerRef.current) return;
+    const map = L.map(containerRef.current, { scrollWheelZoom: false }).setView(center, zoom);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap contributors',
+    }).addTo(map);
+    mapRef.current = map;
+    return () => {
+      map.remove();
+      mapRef.current = null;
+    };
+  }, [view, center, zoom]);
+
+  // Sync markers whenever the listing set changes.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    markersRef.current.forEach((m) => m.remove());
+    markersRef.current = [];
+
+    const points = listings.filter(
+      (l) => Number.isFinite(l.lat) && Number.isFinite(l.lng),
+    );
+
+    points.forEach((listing) => {
+      const marker = L.marker([listing.lat, listing.lng], {
+        icon: pinIcon,
+        title: listing.title ?? 'Listing',
+        alt: listing.title ?? 'Listing',
+      })
+        .addTo(map)
+        .bindPopup(popupHtml(listing));
+
+      marker.on('popupopen', (e) => {
+        const btn = e.popup.getElement()?.querySelector('.lm-open');
+        if (btn) {
+          btn.addEventListener('click', () => onSelect?.(listing), { once: true });
+        }
+      });
+
+      markersRef.current.push(marker);
+    });
+
+    if (points.length > 1) {
+      map.fitBounds(
+        L.latLngBounds(points.map((p) => [p.lat, p.lng])),
+        { padding: [32, 32] },
+      );
+    } else if (points.length === 1) {
+      map.setView([points[0].lat, points[0].lng], 12);
+    }
+  }, [listings, onSelect]);
+
+  return (
+    <section className="lm" aria-label="Listings map">
+      <div className="lm-toggle" role="group" aria-label="View mode">
+        <button
+          type="button"
+          aria-pressed={view === 'list'}
+          onClick={() => setView('list')}
+        >
+          List
+        </button>
+        <button
+          type="button"
+          aria-pressed={view === 'map'}
+          onClick={() => setView('map')}
+        >
+          Map
+        </button>
+      </div>
+
+      {view === 'map' && <div ref={containerRef} className="lm-canvas" />}
+
+      {view === 'list' && (
+        <ul className="lm-list">
+          {listings.map((l) => (
+            <li key={l.id}>
+              <button
+                type="button"
+                className="lm-open"
+                onClick={() => onSelect?.(l)}
+              >
+                {l.title ?? 'Listing'}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {note && <p className="lm-note">{note}</p>}
+    </section>
+  );
 }
