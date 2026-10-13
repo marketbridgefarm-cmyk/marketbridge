@@ -449,7 +449,6 @@ function OrderProgress({ steps }) {
   );
 }
 
-// FIXED: Added inspectionApplies to the destructured props to prevent ReferenceError
 function OverviewCard({ order, title, flags, canCancel, busy, onCancel, inspectionApplies }) {
   const { isBuyer, isSeller, marketplacePaid, marketplacePending, transportJob } = flags;
   const role = isBuyer ? 'Buying' : isSeller ? 'Selling' : 'Order';
@@ -809,11 +808,32 @@ function InspectionCard({ order, title, i }) {
         <InspectionRequestSummary inspection={request} title="Agreed inspection scope" />
       </Section>
 
+      {/* FIXED: Seller prompt — when the inspection is ACCEPTED and the seller
+          has not yet confirmed, the coordination button becomes the primary
+          call-to-action and points at the merged "Confirm inspector on-site"
+          step that now lives inside the handoff modal. Everything else stays
+          the same for other states (IN_PROGRESS, COMPLETED, or post-confirm). */}
       {i.isSeller && ['ACCEPTED', 'IN_PROGRESS', 'COMPLETED'].includes(request.status) && (
-        <Section title="Inspection coordination">
-          <p className="muted">Share site access and coordination details with the inspector.</p>
-          <Button variant="light" size="sm" onClick={() => i.onOpenModal('inspection-coordination')}>
-            Open inspection coordination
+        <Section
+          title={
+            request.status === 'ACCEPTED' && !request.sellerConfirmedAt
+              ? 'Next step: confirm the inspector on-site'
+              : 'Inspection coordination'
+          }
+        >
+          <p className="muted small">
+            {request.status === 'ACCEPTED' && !request.sellerConfirmedAt
+              ? 'Open the coordination handoff below. Once you and the inspector have both shared your site and arrival details, use "Confirm inspector is on-site and ready" inside that panel to unlock the buyer\'s fee payment.'
+              : 'Share site access and coordination details with the inspector.'}
+          </p>
+          <Button
+            variant={request.status === 'ACCEPTED' && !request.sellerConfirmedAt ? 'primary' : 'light'}
+            size="sm"
+            onClick={() => i.onOpenModal('inspection-coordination')}
+          >
+            {request.status === 'ACCEPTED' && !request.sellerConfirmedAt
+              ? 'Open handoff & confirm inspector'
+              : 'Open inspection coordination'}
           </Button>
         </Section>
       )}
