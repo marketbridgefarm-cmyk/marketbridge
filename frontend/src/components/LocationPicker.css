@@ -1,0 +1,22 @@
+/* Location picker (create listing). Tokens come from mb-tokens.css. */
+.lp { margin: 8px 0 16px; }
+
+.lp-canvas {
+  position: relative;
+  z-index: 0; /* keeps Leaflet's internal layers below the sheet's header and close button */
+  height: 280px;
+  width: 100%;
+  border: var(--mb-bw, 1.5px) solid var(--mb-line, #cbd5e1);
+  border-radius: var(--mb-radius-field, 16px);
+  overflow: hidden;
+  background: var(--mb-neutral-bg, #f1f5f9);
+}
+
+.lp-hint {
+  margin: 8px 2px 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--mb-muted, #64748b);
+}
+
+.lp-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
