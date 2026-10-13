@@ -38,15 +38,11 @@ async function syncOrderPaymentObligations(tx, orderId) {
     });
   }
 
-  // FIXED: The MARKETPLACE (goods) obligation only becomes live once the
+  // The MARKETPLACE (goods) obligation only becomes live once the
   // transporter's loading-preparation report has been approved by the buyer.
-  // This is the moment the buyer has seen physical proof of what is loaded
-  // and can safely release the goods payment.
-  //
   // For hire-transport orders, the unlock is `buyerLoadingConfirmedAt`.
   // For own-truck arrangements (no loading report exists), fall back to the
-  // seller's pickup readiness confirmation, which is the equivalent physical
-  // checkpoint in that flow.
+  // seller's pickup readiness confirmation.
   const goodsPaymentUnlocked = order.transportJob
     ? (order.transportJob.method === 'HIRE_TRANSPORTER'
         ? Boolean(order.transportJob.buyerLoadingConfirmedAt)
@@ -95,10 +91,13 @@ async function syncOrderPaymentObligations(tx, orderId) {
   }
 
   const job = order.transportJob;
-  if (job?.method === 'HIRE_TRANSPORTER' &&
-      job.agreedAmount != null &&
-      Number(job.agreedAmount) > 0 &&
-      job.truckOwnerId) {
+  const transportStillAgreed = Boolean(
+    job?.method === 'HIRE_TRANSPORTER' &&
+    job.agreedAmount != null &&
+    Number(job.agreedAmount) > 0 &&
+    job.truckOwnerId
+  );
+  if (transportStillAgreed) {
     desired.push({
       obligationKey: `ORDER:${order.id}:TRANSPORT`,
       type: 'TRANSPORT',
@@ -167,15 +166,8 @@ async function syncOrderPaymentObligations(tx, orderId) {
     result.push(obligation);
   }
 
-  // Retire inspection obligations that are no longer wanted. This happens when
-  // the fee payer mode changes after a first sync (e.g. BUYER -> SPLIT changes
-  // the obligation keys) or when an inspection request is cancelled: without
-  // this the stale full-amount obligation stays OPEN next to the new ones and
-  // the payer could be charged twice. PAID obligations are never touched.
-  //
-  // FIXED: Also retire the MARKETPLACE obligation if goods payment has not
-  // yet been unlocked. This ensures a stale MARKETPLACE obligation created by
-  // an earlier sync cannot survive once the unlock condition is no longer met.
+  // Retire the MARKETPLACE obligation if goods payment has not been unlocked,
+  // so a stale one from an earlier sync cannot survive. PAID is never touched.
   if (!goodsPaymentUnlocked) {
     await tx.paymentObligation.updateMany({
       where: {
@@ -188,6 +180,18 @@ async function syncOrderPaymentObligations(tx, orderId) {
     });
   }
 
+  // Retire the TRANSPORT obligation when no transporter is agreed any more
+  // (released, reopened or cancelled). Otherwise the old fee stays payable.
+  if (!transportStillAgreed) {
+    await tx.paymentObligation.updateMany({
+      where: { orderId: order.id, type: 'TRANSPORT', status: 'OPEN' },
+      data: { status: 'CANCELLED' },
+    });
+  }
+
+  // Retire inspection obligations that are no longer wanted (e.g. fee payer
+  // mode changed BUYER -> SPLIT, or the request was cancelled). PAID
+  // obligations are never touched.
   await tx.paymentObligation.updateMany({
     where: {
       orderId: order.id,
