@@ -1945,6 +1945,19 @@ function DisputeCard({ order, d }) {
   );
 }
 
+/* ========================================================================
+   7b. MarketBridge Order Protection banner (buyer)
+   ------------------------------------------------------------------------
+   FIXED: restructured so the layout cannot collapse. The previous version
+   relied on an un-styled flex row that, when its CSS was missing, produced
+   the "one character per line" vertical-text artifact. This version uses:
+     - a CSS grid with `auto 1fr` (an `fr` track never falls back to
+       min-content the way a flex child with `min-width: auto` does)
+     - a fixed-size icon element (perfectly round)
+     - a plain <ul> for the promise chips (the tick comes from CSS ::before)
+   Styles live in OrderDetail.css, section 20 (.od-protection-*).
+   ======================================================================== */
+
 function BuyerConfidenceCard({ order, recoveryRequests }) {
   const latest = [...(recoveryRequests || [])].sort((a, b) =>
     new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
@@ -1956,37 +1969,42 @@ function BuyerConfidenceCard({ order, recoveryRequests }) {
 
   let status = 'Order remains active';
   let detail = 'If an inspection or transport arrangement changes, the affected service can be reviewed separately. Your goods order is not automatically cancelled.';
-  let tone = 'is-safe';
+  let tone = 'safe';
+
   if (hasOpenDispute) {
     status = 'Admin review in progress';
     detail = 'The case is under review. Payments affected by the dispute remain protected while the decision is pending. You will see the next permitted action here after review.';
-    tone = 'is-review';
+    tone = 'review';
   } else if (recoveryPending) {
     status = 'Waiting for admin approval';
     detail = `Your ${String(latest.type || 'service').toLowerCase()} recovery request has been submitted. A fresh competition is not opened until an administrator approves it.`;
-    tone = 'is-review';
+    tone = 'review';
   } else if (formReleased) {
     status = 'Fresh competition available';
     detail = 'Admin approved recovery. Follow the released form to invite new bids. The replacement provider must have its own agreement and payment.';
-    tone = 'is-safe';
+    tone = 'safe';
   } else if (recoveryRejected) {
     status = 'Recovery request reviewed';
     detail = 'The latest recovery request was not approved. Review the decision and reason, then contact MarketBridge support if you need help.';
-    tone = 'is-review';
+    tone = 'review';
   }
 
   return (
-    <section className={`card od-buyer-confidence ${tone}`} aria-live="polite">
-      <div className="od-confidence-icon" aria-hidden="true">{hasOpenDispute || recoveryPending ? 'i' : '✓'}</div>
-      <div className="od-confidence-main">
-        <span className="od-eyebrow">MARKETBRIDGE ORDER PROTECTION</span>
-        <h2>{status}</h2>
-        <p>{detail}</p>
-        <div className="od-confidence-promises">
-          <span><b aria-hidden="true">✓</b> Service issues reviewed separately</span>
-          <span><b aria-hidden="true">✓</b> No automatic replacement charge</span>
-          <span><b aria-hidden="true">✓</b> Payment and refund status stays visible</span>
-        </div>
+    <section className={`od-protection od-protection--${tone}`} aria-live="polite">
+      <span className="od-protection-icon" aria-hidden="true">
+        {tone === 'review' ? 'i' : '✓'}
+      </span>
+
+      <div className="od-protection-body">
+        <span className="od-protection-eyebrow">MarketBridge Order Protection</span>
+        <h2 className="od-protection-title">{status}</h2>
+        <p className="od-protection-text">{detail}</p>
+
+        <ul className="od-protection-promises">
+          <li>Service issues reviewed separately</li>
+          <li>No automatic replacement charge</li>
+          <li>Payment and refund status stays visible</li>
+        </ul>
       </div>
     </section>
   );
