@@ -162,6 +162,94 @@ const orderDetailInclude = {
 };
 
 // ============================================================================
+// SEALED-BID VISIBILITY
+// ============================================================================
+// Applied to the outbound HTTP response only. It never touches the DB and it
+// never runs before workflow/state computations, so the server still sees the
+// full dataset internally.
+//
+// Transport quotes:
+//   - Admin or the arranging party sees the full quote list and can negotiate.
+//   - The assigned transporter sees only their own quotes.
+//   - The OTHER buyer/seller — the one who did NOT arrange the transport —
+//     receives only an aggregate summary: how many bidders quoted, whether
+//     the transport fee has been paid, and the agreed amount once one exists.
+//   - Any other viewer who happens to be able to open the order (e.g. the
+//     assigned inspector) gets no transport quote data at all.
+//
+// Inspection quotes:
+//   - Admin or the party who requested the inspection sees the full quote
+//     list.
+//   - The assigned inspector sees only their own quotes.
+//   - Any other viewer sees an empty quote list — the frontend already
+//     renders a "the requester is reviewing bids" placeholder for them.
+function applySealedBidVisibility(order, viewerId, viewerRoles = []) {
+  if (!order) return order;
+  const isAdminUser = Array.isArray(viewerRoles) && viewerRoles.includes('ADMIN');
+
+  // ---- Transport quotes ---------------------------------------------------
+  const job = order.transportJob;
+  if (job) {
+    const isBuyer = order.buyerId === viewerId;
+    const isSeller = order.sellerId === viewerId;
+    const isArranging =
+      (job.arrangingParty === 'SELLER' && isSeller) ||
+      (job.arrangingParty === 'BUYER' && isBuyer) ||
+      (job.arrangingParty === 'JOINT' && (isBuyer || isSeller));
+    const isAssignedTruckOwner = job.truckOwnerId === viewerId;
+    const allTransportQuotes = Array.isArray(job.quotes) ? job.quotes : [];
+
+    if (!isAdminUser && !isArranging) {
+      if (isAssignedTruckOwner) {
+        // The assigned transporter sees their own bids only.
+        job.quotes = allTransportQuotes.filter((q) => q.truckOwnerId === viewerId);
+      } else if (isBuyer || isSeller) {
+        // The non-arranging buyer or seller gets an aggregate summary only.
+        const leafQuotes = allTransportQuotes.filter(
+          (q) => (q._count?.childQuotes || 0) === 0
+        );
+        const liveQuotes = leafQuotes.filter((q) =>
+          ['PENDING', 'WAITING', 'SELECTED', 'COUNTERED', 'ACCEPTED'].includes(q.status)
+        );
+        const acceptedCount = liveQuotes.filter((q) => q.status === 'ACCEPTED').length;
+        const transportPaid = (order.payments || []).some(
+          (p) => p.type === 'TRANSPORT' && p.status === 'PAID'
+        );
+
+        job.quotes = [];
+        job.quoteSummary = {
+          bidderCount: liveQuotes.length,
+          acceptedCount,
+          transportPaid,
+          agreedAmount: acceptedCount > 0 ? job.agreedAmount : null,
+        };
+      } else {
+        // Any other viewer (e.g. the assigned inspector) gets nothing about
+        // the transport quotes — not even the summary.
+        job.quotes = [];
+      }
+    }
+  }
+
+  // ---- Inspection quotes --------------------------------------------------
+  const inspectionLists = [
+    ...(Array.isArray(order.inspectionRequests) ? order.inspectionRequests : []),
+    ...(Array.isArray(order.listing?.inspectionRequests) ? order.listing.inspectionRequests : []),
+  ];
+  for (const request of inspectionLists) {
+    if (!request || !Array.isArray(request.quotes)) continue;
+    const isRequester = request.requestedById === viewerId;
+    if (isAdminUser || isRequester) continue;
+    const isAssignedInspector = request.inspectorId === viewerId;
+    request.quotes = isAssignedInspector
+      ? request.quotes.filter((q) => q.inspectorId === viewerId)
+      : [];
+  }
+
+  return order;
+}
+
+// ============================================================================
 // POST /api/orders/buy-now — intentionally disabled
 // ============================================================================
 router.post('/buy-now', authenticate, idempotency('orders.buy-now'), async (req, res) => {
@@ -299,9 +387,15 @@ router.get('/:id', authenticate, async (req, res) => {
       return null;
     });
 
+    // FIXED: strip sealed-bid details before the order leaves the server.
+    // Admins and arranging parties still get the full quote list; the assigned
+    // transporter gets their own bids only; the non-arranging buyer/seller
+    // gets an aggregate summary; everyone else gets nothing.
+    const visibleOrder = applySealedBidVisibility(order, req.user.id, req.user.roles || []);
+
     return res.json({
       order: {
-        ...order,
+        ...visibleOrder,
         priceReviewSuggestion,
         payouts: payoutViews,
         refunds: refundViews,
@@ -953,7 +1047,10 @@ router.patch('/:id/confirm-receipt', authenticate, idempotency('orders.confirm-r
       include: orderDetailInclude,
     });
 
-    return res.json({ message: 'Receipt confirmed. Order completed.', order: updatedOrder });
+    // FIXED: apply the same sealed-bid visibility to the post-receipt response.
+    const visibleOrder = applySealedBidVisibility(updatedOrder, req.user.id, req.user.roles || []);
+
+    return res.json({ message: 'Receipt confirmed. Order completed.', order: visibleOrder });
   } catch (error) {
     req.log.error({ err: error }, 'CONFIRM RECEIPT ERROR:');
     if (error.status) {
@@ -1065,7 +1162,10 @@ router.patch(
         }
       }
 
-      return res.json({ message: 'Order cancelled.', order: updated });
+      // FIXED: same sealed-bid visibility on the cancel response.
+      const visibleOrder = applySealedBidVisibility(updated, req.user.id, req.user.roles || []);
+
+      return res.json({ message: 'Order cancelled.', order: visibleOrder });
     } catch (error) {
       req.log.error({ err: error }, 'CANCEL ORDER ERROR:');
       return res.status(error.status || 500).json({
