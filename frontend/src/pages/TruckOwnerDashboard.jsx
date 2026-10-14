@@ -10,6 +10,8 @@ import { useAuth } from '../context/AuthContext.jsx';
 import './dashboards/TruckOwnerDashboard.css';
 import ProviderReleaseDialog from '../components/ProviderReleaseDialog.jsx';
 import ProviderStandingBanner from '../components/ProviderStandingBanner.jsx';
+import TransportLoadingReport from '../components/TransportLoadingReport.jsx';
+import TransportCoordinationTransporter from '../components/TransportCoordinationTransporter.jsx';
 
 const TABS = [
   { id: 'trucks', label: 'My Trucks' },
@@ -249,6 +251,12 @@ export default function TruckOwnerDashboard() {
   const [evidenceGps, setEvidenceGps] = useState('');
   const [evidenceError, setEvidenceError] = useState('');
   const [submittingEvidence, setSubmittingEvidence] = useState(false);
+
+  // FIXED: The loading-prep report and the pickup-handoff coordination are
+  // now submitted from the transporter's own workspace instead of from the
+  // buyer's OrderDetail page. These two states drive the in-dashboard modals.
+  const [loadingReportJobId, setLoadingReportJobId] = useState(null);
+  const [coordModalJobId, setCoordModalJobId] = useState(null);
 
   function toast(message) {
     setToastMsg(message);
@@ -738,6 +746,19 @@ export default function TruckOwnerDashboard() {
         orderPayments.some((p) => p.type === 'TRANSPORT' && p.status === 'PAID') ||
         (job.payments || []).some((p) => p.type === 'TRANSPORT' && p.status === 'PAID');
 
+      // FIXED: The transporter coordinates the pickup from their own
+      // workspace. This button is shown at every step of the ACCEPTED state
+      // so handoff is never blocked by an intermediate waiting gate.
+      const coordinationButton = (
+        <button
+          type="button"
+          className="sd-btn sd-btn-outline"
+          onClick={() => setCoordModalJobId(job.id)}
+        >
+          Open pickup handoff
+        </button>
+      );
+
       const waiting = (text, extra) => (
         <div className="sd-job-actions">
           <p className="sd-job-waiting">
@@ -748,45 +769,76 @@ export default function TruckOwnerDashboard() {
       );
 
       if (!transportPaid) {
-        return waiting('Waiting for the buyer to pay the transport fee',
-          acceptedQuote && (
-            <button type="button" className="sd-btn sd-btn-outline"
-              disabled={actionLoading === `quote-${acceptedQuote.id}`}
-              onClick={() => releaseTransportAgreement(job.id, acceptedQuote.id)}>
-              {actionLoading === `quote-${acceptedQuote.id}` ? 'Cancelling…' : 'Cancel provisional deal'}
-            </button>
-          ));
+        return waiting(
+          'Waiting for the buyer to pay the transport fee',
+          <>
+            {coordinationButton}
+            {acceptedQuote && (
+              <button
+                type="button"
+                className="sd-btn sd-btn-outline"
+                disabled={actionLoading === `quote-${acceptedQuote.id}`}
+                onClick={() => releaseTransportAgreement(job.id, acceptedQuote.id)}
+              >
+                {actionLoading === `quote-${acceptedQuote.id}` ? 'Cancelling…' : 'Cancel provisional deal'}
+              </button>
+            )}
+          </>
+        );
       }
-      if (!job.sellerPickupConfirmedAt) return waiting('Waiting for the seller to confirm loading preparation');
+      if (!job.sellerPickupConfirmedAt) {
+        return waiting('Waiting for the seller to confirm loading preparation', coordinationButton);
+      }
       if (!job.truckArrivedAt) {
         return (
           <div className="sd-job-actions">
-            <button type="button" className="sd-btn sd-btn-primary" disabled={busy}
-              onClick={() => confirmTruckArrived(job.id)}>
+            <button
+              type="button"
+              className="sd-btn sd-btn-primary"
+              disabled={busy}
+              onClick={() => confirmTruckArrived(job.id)}
+            >
               {busy ? 'Confirming…' : 'Confirm truck arrived on site'}
             </button>
+            {coordinationButton}
           </div>
         );
       }
       if (!job.loadingReport) {
         return (
           <div className="sd-job-actions">
-            <Link to={`/orders/${job.orderId}`} className="sd-btn sd-btn-primary">
+            <button
+              type="button"
+              className="sd-btn sd-btn-primary"
+              onClick={() => setLoadingReportJobId(job.id)}
+            >
               Submit loading-prep report
-            </Link>
-            <p className="sd-job-note">Record what you will load. The buyer reviews it before goods payment.</p>
+            </button>
+            <p className="sd-job-note">
+              Record what you will load. The buyer reviews it before goods payment.
+            </p>
+            {coordinationButton}
           </div>
         );
       }
-      if (!job.buyerLoadingConfirmedAt) return waiting('Waiting for the buyer to approve the loading report');
-      if (!marketplacePaid) return waiting('Waiting for the buyer to pay for the goods');
+      if (!job.buyerLoadingConfirmedAt) {
+        return waiting('Waiting for the buyer to approve the loading report', coordinationButton);
+      }
+      if (!marketplacePaid) {
+        return waiting('Waiting for the buyer to pay for the goods', coordinationButton);
+      }
 
       return (
         <div className="sd-job-actions">
-          <button type="button" className="sd-btn sd-btn-primary" disabled={busy}
-            onClick={() => updateStatus(job.id, 'PICKUP')}>
+          <button
+            type="button"
+            className="sd-btn sd-btn-primary"
+            disabled={busy}
+            onClick={() => updateStatus(job.id, 'PICKUP')}
+          >
             {busy ? 'Updating…' : 'Mark picked up'}
           </button>
+          {coordinationButton}
         </div>
       );
     }
@@ -1883,6 +1935,91 @@ export default function TruckOwnerDashboard() {
           </div>
         </div>
       )}
+
+      {/* =========================================================
+          LOADING-PREP REPORT MODAL (transporter-side capture)
+          FIXED: The transporter submits the loading-prep report from
+          their own workspace, not from the buyer's OrderDetail page.
+      ========================================================= */}
+
+      {loadingReportJobId && (() => {
+        const j = myJobs.find((x) => x.id === loadingReportJobId);
+        if (!j) return null;
+        return (
+          <div
+            className="sd-report-backdrop"
+            role="presentation"
+            onClick={() => setLoadingReportJobId(null)}
+          >
+            <div
+              className="sd-report-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="loading-report-modal-title"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="sd-report-header">
+                <h2 id="loading-report-modal-title">Loading preparation report</h2>
+                <button
+                  type="button"
+                  className="btn btn-light btn-sm"
+                  onClick={() => setLoadingReportJobId(null)}
+                >
+                  Close
+                </button>
+              </div>
+              <TransportLoadingReport
+                transportJobId={j.id}
+                jobStatus={j.status}
+                sellerConfirmed={Boolean(j.sellerPickupConfirmedAt)}
+                paymentsReady={j.order?.payments?.some(
+                  (p) => p.type === 'TRANSPORT' && p.status === 'PAID'
+                )}
+                truckArrived={Boolean(j.truckArrivedAt)}
+                onSubmitted={async () => {
+                  setLoadingReportJobId(null);
+                  await loadAll(false);
+                }}
+              />
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* =========================================================
+          PICKUP HANDOFF MODAL (transporter-side coordination)
+          FIXED: Moved off the buyer's order page. The transporter and
+          seller exchange pickup logistics from their own workspaces.
+      ========================================================= */}
+
+      {coordModalJobId && (
+        <div
+          className="sd-report-backdrop"
+          role="presentation"
+          onClick={() => setCoordModalJobId(null)}
+        >
+          <div
+            className="sd-report-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="coord-modal-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="sd-report-header">
+              <h2 id="coord-modal-title">Pickup handoff</h2>
+              <button
+                type="button"
+                className="btn btn-light btn-sm"
+                onClick={() => setCoordModalJobId(null)}
+              >
+                Close
+              </button>
+            </div>
+            <TransportCoordinationTransporter transportJobId={coordModalJobId} />
+          </div>
+        </div>
+      )}
+
       <ProviderReleaseDialog
         open={Boolean(releaseTarget)}
         serviceLabel="transport agreement"
