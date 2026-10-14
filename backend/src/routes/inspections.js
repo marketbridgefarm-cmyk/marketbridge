@@ -28,6 +28,15 @@ const {
   computeInspectionCompletionDueAt,
   computePaymentDueAt,
 } = require('../utils/orderTiming');
+
+const {
+  quoteTurn,
+  isQuoteExpired,
+  quoteExpiry,
+  resolveReleaseWindowHours,
+  computeReleaseAvailableAt,
+} = require('../services/negotiationService');
+
 const {
   AMOUNT_LIMITS,
   validAmount,
@@ -171,16 +180,13 @@ function sanitizeWorkDetails(input) {
 
 // ============================================================================
 // NEGOTIATION TURN + LIFECYCLE HELPERS
+// ----------------------------------------------------------------------------
+// quoteTurn, isQuoteExpired, and quoteExpiry now live in
+// services/negotiationService.js and are imported at the top of this file.
+// The release-window logic below is a thin wrapper around
+// computeReleaseAvailableAt so the same pure rules are shared across
+// inspections and transport.
 // ============================================================================
-
-function quoteTurn(quote) {
-  if (quote.status === 'PENDING') return 'REQUESTER';
-  if (quote.status === 'SELECTED') return 'REQUESTER';
-  if (quote.status === 'COUNTERED') {
-    return quote.counteredBy === 'REQUESTER' ? 'PROVIDER' : 'REQUESTER';
-  }
-  return null;
-}
 
 async function findLeafQuote(tx, quoteId) {
   return tx.inspectionQuote.findFirst({
@@ -200,28 +206,12 @@ async function findCompetingLiveQuote(tx, inspectionRequestId, exceptQuoteId) {
   });
 }
 
-function isQuoteExpired(quote) {
-  return Boolean(quote.expiresAt && new Date(quote.expiresAt).getTime() <= Date.now());
-}
-
-function quoteExpiry(hours = 24) {
-  return new Date(Date.now() + hours * 60 * 60 * 1000);
-}
-
-function inspectionReleaseAfterHours() {
-  const configured = Number(process.env.INSPECTION_RELEASE_AFTER_HOURS);
-  return Number.isFinite(configured) && configured >= 0 ? configured : 72;
-}
+// Inspection-specific release window. Same pure logic as transport; the
+// only difference is which env var feeds the window length.
+const INSPECTION_RELEASE_AFTER_HOURS = resolveReleaseWindowHours('INSPECTION_RELEASE_AFTER_HOURS', 72);
 
 function inspectionReleaseAvailableAt(quote) {
-  if (!quote) return null;
-  const providerTurn =
-    quote.status === 'SELECTED' ||
-    (quote.status === 'COUNTERED' && quote.counteredBy === 'REQUESTER');
-  if (!providerTurn) return null;
-  const since = new Date(quote.updatedAt || quote.createdAt).getTime();
-  if (!Number.isFinite(since)) return null;
-  return new Date(since + inspectionReleaseAfterHours() * 60 * 60 * 1000);
+  return computeReleaseAvailableAt(quote, INSPECTION_RELEASE_AFTER_HOURS);
 }
 
 // ============================================================================
