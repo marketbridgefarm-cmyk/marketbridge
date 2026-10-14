@@ -19,7 +19,6 @@ const { matchTrucks } = require('../services/transportMatchingService');
 // payment deadline after the buyer approves the loading report.
 const {
   computeSellerTransportPreparationDueAt: computeSellerPreparationDueAt,
-  computeBuyerDecisionDueAt,
   computeLoadingApprovalDueAt: computeBuyerLoadingDueAt,
   computePaymentDueAt,
 } = require('../utils/orderTiming');
@@ -860,45 +859,6 @@ async function getTransportPaymentGate(client, jobId) {
   );
   const missing = transportPaid ? [] : ['TRANSPORT'];
   return { ready: missing.length === 0, missing, transportRequired, transportPaid };
-}
-
-async function checkLoadingReportGate(client, jobId) {
-  const job = await client.transportJob.findUnique({
-    where: { id: jobId },
-    include: {
-      order: {
-        include: {
-          payments: { select: { id: true, type: true, status: true } },
-          inspectionRequests: {
-            where: { status: { not: 'CANCELLED' } },
-            include: { payments: { select: { id: true, type: true, status: true } } },
-          },
-        },
-      },
-      payments: { select: { id: true, type: true, status: true } },
-    },
-  });
-
-  if (!job) return { ready: false, missing: ['TRANSPORT_JOB'] };
-
-  const missing = [];
-
-  for (const r of job.order.inspectionRequests || []) {
-    if (r.fee == null || Number(r.fee) <= 0) continue;
-    const paid = (r.payments || []).some(
-      (p) => p.type === 'INSPECTOR' && p.status === 'PAID'
-    );
-    if (!paid) missing.push(`INSPECTOR:${r.id}`);
-  }
-
-  if (job.method === 'HIRE_TRANSPORTER') {
-    const transportPaid = (job.payments || []).some(
-      (p) => p.type === 'TRANSPORT' && p.status === 'PAID'
-    );
-    if (!transportPaid) missing.push('TRANSPORT');
-  }
-
-  return { ready: missing.length === 0, missing };
 }
 
 router.patch('/:id/reopen-bidding', authenticate, requireRole('ADMIN'), requireMfa(), async (req, res) => {
