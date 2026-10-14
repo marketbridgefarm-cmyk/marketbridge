@@ -32,6 +32,8 @@ const inspectionRoutes = require('./routes/inspections');
 const transportRoutes = require('./routes/transport');
 const transportCoordinationRoutes = require('./routes/transportCoordination');
 const transportEvidenceRoutes = require('./routes/transportEvidence');
+const transportQuotesRoutes = require('./routes/transportQuotes');
+
 const orderRoutes = require('./routes/orders');
 const paymentRoutes = require('./routes/payments');
 const adRoutes = require('./routes/ads');
@@ -360,6 +362,7 @@ app.use('/api/transport', transportCoordinationRoutes);
 
 app.use('/api/transport', transportEvidenceRoutes);
 
+app.use('/api/transport', transportQuotesRoutes);
 app.use('/api/orders', orderRoutes);
 
 // Payment routes.
