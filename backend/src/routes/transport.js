@@ -28,6 +28,15 @@ const {
   computeLoadingApprovalDueAt: computeBuyerLoadingDueAt,
   computePaymentDueAt,
 } = require('../utils/orderTiming');
+
+const {
+  quoteTurn,
+  isQuoteExpired,
+  quoteExpiry,
+  resolveReleaseWindowHours,
+  computeReleaseAvailableAt,
+} = require('../services/negotiationService');
+
 const {
   AMOUNT_LIMITS,
   validAmount,
@@ -133,15 +142,6 @@ function quoteError(message, statusCode = 400) {
   return error;
 }
 
-function quoteTurn(quote) {
-  if (quote.status === 'PENDING') return 'REQUESTER';
-  if (quote.status === 'SELECTED') return 'REQUESTER';
-  if (quote.status === 'COUNTERED') {
-    return quote.counteredBy === 'REQUESTER' ? 'PROVIDER' : 'REQUESTER';
-  }
-  return null;
-}
-
 async function findCompetingLiveQuote(tx, transportJobId, exceptQuoteId) {
   return tx.transportQuote.findFirst({
     where: {
@@ -161,30 +161,6 @@ function findLeafQuote(tx, quoteId, extra = {}) {
   });
 }
 
-function isQuoteExpired(quote) {
-  return Boolean(quote.expiresAt && new Date(quote.expiresAt).getTime() <= Date.now());
-}
-
-function quoteExpiry(hours = 24) {
-  return new Date(Date.now() + hours * 60 * 60 * 1000);
-}
-
-function transportReleaseAfterHours() {
-  const configured = Number(process.env.TRANSPORT_RELEASE_AFTER_HOURS);
-  return Number.isFinite(configured) && configured >= 0 ? configured : 72;
-}
-
-function transportReleaseAvailableAt(quote) {
-  if (!quote) return null;
-  const providerTurn =
-    quote.status === 'SELECTED' ||
-    (quote.status === 'COUNTERED' && quote.counteredBy === 'REQUESTER');
-  if (!providerTurn) return null;
-  const since = new Date(quote.updatedAt || quote.createdAt).getTime();
-  if (!Number.isFinite(since)) return null;
-  return new Date(since + transportReleaseAfterHours() * 60 * 60 * 1000);
-}
-
 function isArrangingParty(job, order, userId) {
   return (
     (job.arrangingParty === 'SELLER' && order.sellerId === userId) ||
@@ -202,6 +178,14 @@ class ActiveTruckAssignmentError extends Error {
     this.code = 'ACTIVE_TRUCK_ASSIGNMENT';
     this.statusCode = 409;
   }
+}
+
+// Transport-specific release window. Same pure logic as inspections; the
+// only difference is which env var feeds the window length.
+const TRANSPORT_RELEASE_AFTER_HOURS = resolveReleaseWindowHours('TRANSPORT_RELEASE_AFTER_HOURS', 72);
+
+function transportReleaseAvailableAt(quote) {
+  return computeReleaseAvailableAt(quote, TRANSPORT_RELEASE_AFTER_HOURS);
 }
 
 // ============================================================================
