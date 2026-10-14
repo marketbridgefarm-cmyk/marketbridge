@@ -37,6 +37,19 @@ import RefundStatusCard from '../components/RefundStatusCard.jsx';
 
 import './order-details/OrderDetail.css';
 
+import {
+  pad2,
+  shortId,
+  label,
+  money,
+  formatDateTime,
+  getError,
+  statusTone,
+  initials,
+  scrollToId,
+  leafQuotes,
+} from './order-details/orderDetailUtils.js';
+
 const PAYMENT_METHODS = [
   { value: 'TELEBIRR', label: 'Telebirr via Chapa' },
   { value: 'QR', label: 'QR Code' },
@@ -50,58 +63,6 @@ const DISPUTE_TYPES = [
   ['TRANSPORT_ISSUE', 'Transport issue'],
   ['OTHER', 'Other'],
 ];
-
-const pad2 = (n) => String(n).padStart(2, '0');
-
-const shortId = (id) => id?.slice(0, 8) || '—';
-
-const label = (value) => String(value || '').replace(/_/g, ' ');
-
-const money = (value, fraction = 2) =>
-  Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: fraction });
-
-const formatDateTime = (value) => {
-  if (!value) return '—';
-  const date = new Date(value);
-  return Number.isNaN(date.getTime())
-    ? '—'
-    : date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
-};
-
-const getError = (error, fallback) =>
-  error?.response?.data?.error || error?.response?.data?.message || error?.message || fallback;
-
-const statusTone = (status) => {
-  const value = String(status || '').toUpperCase();
-  if (['COMPLETED', 'DELIVERED', 'PAID', 'ACCEPTED', 'CONFIRMED'].includes(value)) return 'good';
-  if (['CANCELLED', 'REJECTED', 'FAILED', 'DISPUTED'].includes(value)) return 'bad';
-  if (['TRANSPORT_ARRANGED', 'ARRANGED', 'QUOTED'].includes(value)) return 'info';
-  if (['PENDING', 'AWAITING_PAYMENT', 'IN_PROGRESS', 'PROCESSING'].includes(value)) return 'wait';
-  return 'neutral';
-};
-
-const initials = (name) =>
-  String(name || '?').trim().split(/\s+/).slice(0, 2).map((p) => p[0]).join('').toUpperCase() || '?';
-
-const scrollToId = (id, delay = 0) => {
-  const go = () => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    el.classList.remove('od-flash');
-    void el.offsetWidth;
-    el.classList.add('od-flash');
-    window.setTimeout(() => el.classList.remove('od-flash'), 1800);
-  };
-  if (delay) window.setTimeout(go, delay);
-  else go();
-};
-
-const leafQuotes = (quotes) => {
-  const list = Array.isArray(quotes) ? quotes : [];
-  const parents = new Set(list.map((q) => q.parentQuoteId).filter(Boolean));
-  return list.filter((q) => !parents.has(q.id));
-};
 
 const TRANSPORT_RELEASE_AFTER_HOURS = (() => {
   const configured = Number(import.meta?.env?.VITE_TRANSPORT_RELEASE_AFTER_HOURS);
@@ -458,12 +419,7 @@ function OverviewCard({ order, title, flags, canCancel, busy, onCancel, inspecti
   const inspectionDone = order.inspectionRequests?.some(r => r.status === 'COMPLETED' && r.report) || false;
   const decisionDone = order.buyerDecision === 'BUY';
 
-  // FIXED: Progress steps reflect the new physical-reality-gated flow.
-  // Inspected → Decided → Transport → Loaded → Paid → Delivered → Completed.
   const transportDone = Boolean(transportJob && ['ACCEPTED', 'PICKUP', 'IN_TRANSIT', 'DELIVERED'].includes(transportJob.status));
-  // FIXED: "Loaded" means different things per method. Hire transport: the
-  // buyer approved the loading-prep report. Own truck: the seller confirmed
-  // pickup readiness. The old OR combined both into one and lit up early.
   const loadedDone = transportJob?.method === 'HIRE_TRANSPORTER'
     ? Boolean(transportJob?.buyerLoadingConfirmedAt)
     : Boolean(transportJob?.sellerPickupConfirmedAt);
@@ -807,11 +763,6 @@ function InspectionCard({ order, title, i }) {
         <InspectionRequestSummary inspection={request} title="Agreed inspection scope" />
       </Section>
 
-      {/* FIXED: Seller prompt — when the inspection is ACCEPTED and the seller
-          has not yet confirmed, the coordination button becomes the primary
-          call-to-action and points at the merged "Confirm inspector on-site"
-          step that now lives inside the handoff modal. Everything else stays
-          the same for other states (IN_PROGRESS, COMPLETED, or post-confirm). */}
       {i.isSeller && ['ACCEPTED', 'IN_PROGRESS', 'COMPLETED'].includes(request.status) && (
         <Section
           title={
@@ -1256,8 +1207,6 @@ function QuoteRow({ quote, t, hasActiveNegotiation }) {
     quote.status === 'COUNTERED' && quote.counteredBy === 'REQUESTER';
 
   const isOwner = quote.truckOwnerId === t.currentUserId;
-  // On the buyer's order page, only the requester (arranger) responds.
-  // The transporter responds from their own dashboard.
   const canRespond = t.canChooseQuote && isArrangerTurn;
   const rating = typeof quote.truckOwner?.rating === 'number' ? quote.truckOwner.rating.toFixed(1) : '—';
   const ownerName = quote.truckOwner?.name || 'Truck owner';
@@ -1494,9 +1443,6 @@ function TransportCard({ order, t }) {
           </Section>
         )}
 
-        {/* FIXED: Coordination is a seller-side control on the buyer's page.
-            The transporter coordinates the pickup from their own dashboard
-            (TruckOwnerDashboard.jsx), not from inside the buyer's order view. */}
         {['ACCEPTED', 'PICKUP', 'IN_TRANSIT', 'DELIVERED'].includes(job.status) && t.isSeller && (
           <Section title="Coordination">
             <Button variant="light" size="sm" onClick={() => t.onOpenModal('seller-transport-coordination')}>
@@ -1505,10 +1451,6 @@ function TransportCard({ order, t }) {
           </Section>
         )}
 
-        {/* FIXED: Seller needs a real button to confirm loading preparation.
-            Without it the workflow was stuck at this step with no UI: the
-            transporter's card said "waiting for the seller to confirm
-            loading preparation", but the seller had nothing to click. */}
         {t.isSeller && job.status === 'ACCEPTED' && !job.sellerPickupConfirmedAt && (
           <Section title="Loading preparation">
             <p className="muted small">
@@ -1534,9 +1476,6 @@ function TransportCard({ order, t }) {
           </Section>
         )}
 
-        {/* FIXED: Seller needs the truck-arrival button too. The backend
-            already accepts SELLER on POST /transport/:id/truck-arrived, but
-            only the transporter dashboard exposed it in the UI. */}
         {t.isSeller &&
           job.status === 'ACCEPTED' &&
           job.sellerPickupConfirmedAt &&
@@ -1568,11 +1507,6 @@ function TransportCard({ order, t }) {
         {job.truckArrivedAt && (
           <Section title="Truck arrival" meta={formatDateTime(job.truckArrivedAt)} strong />
         )}
-
-        {/* FIXED: The loading-report form and the transporter waiting hint
-            were removed from this page. The transporter submits their
-            loading-prep report from TruckOwnerDashboard.jsx now; the buyer
-            and seller still see the summary and the buyer still approves. */}
 
         {showLoadingSummary && (
           <>
@@ -1877,15 +1811,6 @@ function DisputeCard({ order, d }) {
 
 /* ========================================================================
    7b. MarketBridge Order Protection banner (buyer)
-   ------------------------------------------------------------------------
-   FIXED: restructured so the layout cannot collapse. The previous version
-   relied on an un-styled flex row that, when its CSS was missing, produced
-   the "one character per line" vertical-text artifact. This version uses:
-     - a CSS grid with `auto 1fr` (an `fr` track never falls back to
-       min-content the way a flex child with `min-width: auto` does)
-     - a fixed-size icon element (perfectly round)
-     - a plain <ul> for the promise chips (the tick comes from CSS ::before)
-   Styles live in OrderDetail.css, section 20 (.od-protection-*).
    ======================================================================== */
 
 function BuyerConfidenceCard({ order, recoveryRequests }) {
@@ -2139,9 +2064,6 @@ export default function OrderDetail() {
     !paidInspections.every((r) => Array.isArray(r.payments)) ||
     paidInspections.every((r) => r.payments.some((p) => p.type === 'INSPECTOR' && p.status === 'PAID'));
 
-  // FIXED: Transport no longer requires the inspection report or its payment.
-  // It unlocks when the buyer has made the BUY decision (the goods are
-  // committed). The inspection report informed that decision upstream.
   const transportBlockedReason = !isPhysicalGoods
     ? null
     : !decisionGateMet
@@ -2201,9 +2123,6 @@ export default function OrderDetail() {
   const transportProcessing = transportPayments.some((p) => p.status === 'PROCESSING');
   const hiredTransport = transportJob?.method === 'HIRE_TRANSPORTER';
 
-  // FIXED: Goods payment is unlocked by the loading-prep report approval
-  // (hire transport) or by seller pickup confirmation (own-truck). The
-  // backend enforces the same condition; this is only the UI gate.
   const goodsPaymentUnlocked = transportJob
     ? (hiredTransport
         ? Boolean(transportJob.buyerLoadingConfirmedAt)
@@ -2249,8 +2168,6 @@ export default function OrderDetail() {
         : 'The goods payment unlocks once the seller confirms the goods are ready for pickup.'
       : null;
 
-  // FIXED: Transport fee is payable as soon as the transporter's quote is
-  // accepted. No goods-payment or loading-approval gate applies.
   const canStartTransportPayment =
     Boolean(transportJob) &&
     hiredTransport &&
