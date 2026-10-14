@@ -29,6 +29,9 @@ const authRoutes = require('./routes/auth');
 const listingRoutes = require('./routes/listings');
 const offerRoutes = require('./routes/offers');
 const inspectionRoutes = require('./routes/inspections');
+
+const inspectionQuotesRoutes = require('./routes/inspectionQuotes');
+
 const transportRoutes = require('./routes/transport');
 const transportCoordinationRoutes = require('./routes/transportCoordination');
 const transportEvidenceRoutes = require('./routes/transportEvidence');
@@ -357,6 +360,10 @@ app.use('/api/offers', offerRoutes);
 app.use('/api/inspections', inspectionRoutes);
 
 app.use('/api/transport', transportRoutes);
+app.use('/api/inspections', inspectionQuotesRoutes);
+
+
+
 
 app.use('/api/transport', transportCoordinationRoutes);
 
