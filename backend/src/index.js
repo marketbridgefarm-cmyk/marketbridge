@@ -30,14 +30,8 @@ const listingRoutes = require('./routes/listings');
 const offerRoutes = require('./routes/offers');
 const inspectionRoutes = require('./routes/inspections');
 
-const inspectionQuotesRoutes = require('./routes/inspectionQuotes');
-const inspectionEvidenceRoutes = require('./routes/inspectionEvidence');
-const inspectionCoordinationRoutes = require('./routes/inspectionCoordination');
 
 const transportRoutes = require('./routes/transport');
-const transportCoordinationRoutes = require('./routes/transportCoordination');
-const transportEvidenceRoutes = require('./routes/transportEvidence');
-const transportQuotesRoutes = require('./routes/transportQuotes');
 
 const orderRoutes = require('./routes/orders');
 const paymentRoutes = require('./routes/payments');
@@ -361,16 +355,10 @@ app.use('/api/offers', offerRoutes);
 
 app.use('/api/inspections', inspectionRoutes);
 
-app.use('/api/inspections', inspectionEvidenceRoutes);
-app.use('/api/inspections', inspectionQuotesRoutes);
-app.use('/api/inspections', inspectionCoordinationRoutes);
 
 app.use('/api/transport', transportRoutes);
-app.use('/api/transport', transportCoordinationRoutes);
 
-app.use('/api/transport', transportEvidenceRoutes);
 
-app.use('/api/transport', transportQuotesRoutes);
 app.use('/api/orders', orderRoutes);
 
 // Payment routes.
