@@ -3,6 +3,26 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
 
+
+
+
+
+
+
+const { lapseInspectionAgreement } = require('../services/inspectionLapseService');
+const { noticeInspectionWaitingUnlocked } = require('../services/waitingListService');
+
+// 3-hour handoff window (mirrors the constant in routes/inspections.js).
+// Overridable via env for testing / policy tuning.
+const INSPECTOR_COORDINATION_WINDOW_HOURS = (() => {
+  const configured = Number(process.env.INSPECTOR_COORDINATION_WINDOW_HOURS);
+  return Number.isFinite(configured) && configured > 0 ? configured : 3;
+})();
+
+
+
+
+
 const prisma = require('../config/db');
 const { authenticate } = require('../middleware/auth');
 const { recordAuditEvent } = require('../utils/audit');
