@@ -17,11 +17,10 @@ import { useAuth } from '../context/AuthContext.jsx';
 
 import InspectionCoordinationSeller from '../components/InspectionCoordinationSeller.jsx';
 import OrderDecisionPanel from '../components/OrderDecisionPanel.jsx';
-import TransportLoadingReport, {
+import {
   TransportLoadingReportSummary,
 } from '../components/TransportLoadingReport.jsx';
 import TransportCoordinationSeller from '../components/TransportCoordinationSeller.jsx';
-import TransportCoordinationTransporter from '../components/TransportCoordinationTransporter.jsx';
 import ProviderReleaseDialog from '../components/ProviderReleaseDialog.jsx';
 
 import RatingBox from '../components/RatingBox.jsx';
@@ -1149,46 +1148,6 @@ function InspectionCard({ order, title, i }) {
    6. Transport
    ======================================================================== */
 
-function DeliveryEvidenceForm({ t }) {
-  const { evidence, setEvidence, notes, setNotes, evidenceBusy } = t;
-  const ready = evidence.photoKeys.length || evidence.videoKeys.length || notes.trim();
-  return (
-    <Notice title="Delivery evidence">
-      <p className="muted">Upload delivery evidence before marking the trip delivered.</p>
-      <EvidenceUploader
-        uploadUrl={`/transport/${t.job.id}/evidence/media`}
-        disabled={evidenceBusy}
-        onUploaded={({ photoKeys, videoKeys }) =>
-          setEvidence((prev) => ({
-            photoKeys: [...prev.photoKeys, ...photoKeys],
-            videoKeys: [...prev.videoKeys, ...videoKeys],
-          }))
-        }
-      />
-      {(evidence.photoKeys.length > 0 || evidence.videoKeys.length > 0) && (
-        <p className="muted small">{evidence.photoKeys.length} photo(s), {evidence.videoKeys.length} video(s) ready.</p>
-      )}
-      <textarea
-        className="field"
-        value={notes}
-        onChange={(e) => setNotes(e.target.value)}
-        placeholder="Optional delivery condition / handover notes…"
-        rows={3}
-        disabled={evidenceBusy}
-      />
-      <Button
-        variant="primary"
-        disabled={evidenceBusy || !ready}
-        busy={evidenceBusy}
-        busyText="Submitting…"
-        onClick={() => t.submitEvidence('DELIVERY', 'DELIVERED')}
-      >
-        Submit delivery evidence & mark delivered
-      </Button>
-    </Notice>
-  );
-}
-
 const RELEASE_AFTER_ACCEPT_HOURS = (() => {
   const configured = Number(import.meta?.env?.VITE_RELEASE_AFTER_ACCEPT_HOURS);
   return Number.isFinite(configured) && configured >= 0 ? configured : 24;
@@ -1297,14 +1256,14 @@ function QuoteRow({ quote, t, hasActiveNegotiation }) {
     quote.status === 'COUNTERED' && quote.counteredBy === 'REQUESTER';
 
   const isOwner = quote.truckOwnerId === t.currentUserId;
-  const canRespond =
-    (t.canChooseQuote && isArrangerTurn) ||
-    (isOwner && isTransporterTurn);
+  // On the buyer's order page, only the requester (arranger) responds.
+  // The transporter responds from their own dashboard.
+  const canRespond = t.canChooseQuote && isArrangerTurn;
   const rating = typeof quote.truckOwner?.rating === 'number' ? quote.truckOwner.rating.toFixed(1) : '—';
   const ownerName = quote.truckOwner?.name || 'Truck owner';
 
   const isWaitingPending =
-    (quote.status === 'PENDING' || quote.status === 'WAITING') && 
+    (quote.status === 'PENDING' || quote.status === 'WAITING') &&
     !['REQUESTED', 'QUOTED'].includes(t.job?.status);
 
   return (
@@ -1357,7 +1316,7 @@ function QuoteRow({ quote, t, hasActiveNegotiation }) {
         {canRespond && (
           <div className="od-quote-actions">
             <Button size="sm" disabled={working} busy={working} busyText="Accepting…" onClick={() => t.acceptQuote(quote.id)}>
-              {isTransporterTurn && quote.status === 'COUNTERED' ? 'Accept buyer counter' : 'Accept quote'}
+              Accept quote
             </Button>
             <AmountPicker
               className="field-inline"
@@ -1381,28 +1340,6 @@ function QuoteRow({ quote, t, hasActiveNegotiation }) {
             <Button variant="light" size="sm" disabled={working} busy={working} busyText="Rejecting…" onClick={() => t.rejectQuote(quote.id)}>
               Reject
             </Button>
-          </div>
-        )}
-
-        {isOwner && quote.status === 'ACCEPTED' && (
-          <div className="od-mt-12">
-            <Button
-              variant="light"
-              size="sm"
-              disabled={working}
-              onClick={() => t.openProviderRelease({
-                service: 'TRANSPORT',
-                quoteId: quote.id,
-                transportJobId: t.job.id,
-              })}
-            >
-              Cancel provisional agreement
-            </Button>
-            <p className="muted small od-mt-6">
-              Your provisional agreement is not committed yet. Cancelling it
-              releases the slot for another transporter and is recorded against
-              your standing.
-            </p>
           </div>
         )}
 
@@ -1557,18 +1494,14 @@ function TransportCard({ order, t }) {
           </Section>
         )}
 
-        {['ACCEPTED', 'PICKUP', 'IN_TRANSIT', 'DELIVERED'].includes(job.status) && (
+        {/* FIXED: Coordination is a seller-side control on the buyer's page.
+            The transporter coordinates the pickup from their own dashboard
+            (TruckOwnerDashboard.jsx), not from inside the buyer's order view. */}
+        {['ACCEPTED', 'PICKUP', 'IN_TRANSIT', 'DELIVERED'].includes(job.status) && t.isSeller && (
           <Section title="Coordination">
-            {t.isSeller && (
-              <Button variant="light" size="sm" onClick={() => t.onOpenModal('seller-transport-coordination')}>
-                Open pickup handoff
-              </Button>
-            )}
-            {t.isTransporter && (
-              <Button variant="light" size="sm" onClick={() => t.onOpenModal('transporter-transport-coordination')}>
-                Open pickup handoff
-              </Button>
-            )}
+            <Button variant="light" size="sm" onClick={() => t.onOpenModal('seller-transport-coordination')}>
+              Open pickup handoff
+            </Button>
           </Section>
         )}
 
@@ -1632,36 +1565,14 @@ function TransportCard({ order, t }) {
             </Section>
           )}
 
-        {/* Transporter waiting hint — the actual confirm button lives on
-            their dashboard (TruckOwnerDashboard.jsx). */}
-        {t.isTransporter &&
-          job.status === 'ACCEPTED' &&
-          job.sellerPickupConfirmedAt &&
-          !job.truckArrivedAt && (
-            <Section title="Truck arrival">
-              <p className="muted small">
-                Waiting for your truck to arrive on site. Confirm arrival from the Action Center.
-              </p>
-            </Section>
-          )}
-
         {job.truckArrivedAt && (
           <Section title="Truck arrival" meta={formatDateTime(job.truckArrivedAt)} strong />
         )}
 
-        {t.isTransporter && job.status === 'ACCEPTED' && (
-          // FIXED: pass truckArrived so the loading-report form only enables
-          // after the on-site step is complete. missingPayments is no longer
-          // part of the contract.
-          <TransportLoadingReport
-            transportJobId={job.id}
-            jobStatus={job.status}
-            sellerConfirmed={Boolean(job.sellerPickupConfirmedAt)}
-            paymentsReady={t.paid}
-            truckArrived={Boolean(job.truckArrivedAt)}
-            onSubmitted={t.reload}
-          />
-        )}
+        {/* FIXED: The loading-report form and the transporter waiting hint
+            were removed from this page. The transporter submits their
+            loading-prep report from TruckOwnerDashboard.jsx now; the buyer
+            and seller still see the summary and the buyer still approves. */}
 
         {showLoadingSummary && (
           <>
@@ -1707,10 +1618,9 @@ function TransportCard({ order, t }) {
           <Section title="Evidence requirements">
             <p className="muted">
               Loading evidence is captured through the loading report above. The
-              transporter uploads delivery evidence before marking the trip
-              delivered.
+              transporter uploads pickup and delivery evidence from their own
+              dashboard before advancing the trip stages.
             </p>
-            {t.isTransporter && job.status === 'IN_TRANSIT' && <DeliveryEvidenceForm t={t} />}
           </Section>
 
           <Section title="Evidence gallery">
@@ -3192,14 +3102,6 @@ export default function OrderDetail() {
         title="Pickup Handoff (Seller)"
       >
         {transportJob?.id && <TransportCoordinationSeller transportJobId={transportJob.id} />}
-      </Modal>
-
-      <Modal
-        isOpen={activeModal === 'transporter-transport-coordination'}
-        onClose={() => setActiveModal(null)}
-        title="Pickup Handoff (Transporter)"
-      >
-        {transportJob?.id && <TransportCoordinationTransporter transportJobId={transportJob.id} />}
       </Modal>
 
       <ProviderReleaseDialog
