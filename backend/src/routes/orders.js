@@ -40,13 +40,18 @@ const TRANSPORT_IN_MOTION_STATUSES = ['PICKUP', 'IN_TRANSIT', 'DELIVERED'];
 
 const userSelect = { id: true, name: true, phone: true, location: true, rating: true, verificationStatus: true };
 
+// FIXED: truckOwner.phone is NOT selected here. Every viewer of the order
+// page uses this include, and the buyer must never see the transporter's
+// contact number. The seller needs it (physical handoff), the transporter
+// obviously has their own, and admins need it for support — so it is added
+// back per-request in applySealedBidVisibility() for those three roles only.
 const transportInclude = {
   loadingReport: { include: { submittedBy: { select: { id: true, name: true } } } },
-  truckOwner: { select: { id: true, name: true, phone: true, rating: true, verificationStatus: true } },
+  truckOwner: { select: { id: true, name: true, rating: true, verificationStatus: true } },
   truck: { select: { id: true, registration: true, truckType: true, capacity: true, operatingArea: true, availability: true, verificationStatus: true, rating: true } },
   quotes: {
     include: {
-      truckOwner: { select: { id: true, name: true, phone: true, rating: true, verificationStatus: true } },
+      truckOwner: { select: { id: true, name: true, rating: true, verificationStatus: true } },
       truck: { select: { id: true, registration: true, truckType: true, capacity: true, operatingArea: true, availability: true, verificationStatus: true, rating: true } },
       _count: { select: { childQuotes: true } },
     },
@@ -183,12 +188,34 @@ const orderDetailInclude = {
 //   - The assigned inspector sees only their own quotes.
 //   - Any other viewer sees an empty quote list — the frontend already
 //     renders a "the requester is reviewing bids" placeholder for them.
-function applySealedBidVisibility(order, viewerId, viewerRoles = []) {
+//
+// FIXED: This helper is now async because it re-hydrates the transporter's
+// phone number for the three roles that legitimately need it (seller,
+// assigned transporter, admin). The base transportInclude intentionally
+// omits phone from truckOwner so the buyer never receives it.
+async function applySealedBidVisibility(order, viewerId, viewerRoles = []) {
   if (!order) return order;
   const isAdminUser = Array.isArray(viewerRoles) && viewerRoles.includes('ADMIN');
 
   // ---- Transport quotes ---------------------------------------------------
   const job = order.transportJob;
+
+  // FIXED: re-add the transporter's phone number for the two roles that
+  // legitimately need it — the seller (physical handoff) and the assigned
+  // transporter (their own record) — plus admins for support. The buyer
+  // receives only the name.
+  if (job && job.truckOwner) {
+    const isSellerOfOrder = order.sellerId === viewerId;
+    const isAssignedTransporter = job.truckOwnerId === viewerId;
+    if (isSellerOfOrder || isAssignedTransporter || isAdminUser) {
+      const owner = await prisma.user.findUnique({
+        where: { id: job.truckOwner.id },
+        select: { phone: true },
+      }).catch(() => null);
+      if (owner?.phone) job.truckOwner.phone = owner.phone;
+    }
+  }
+
   if (job) {
     const isBuyer = order.buyerId === viewerId;
     const isSeller = order.sellerId === viewerId;
@@ -390,8 +417,10 @@ router.get('/:id', authenticate, async (req, res) => {
     // FIXED: strip sealed-bid details before the order leaves the server.
     // Admins and arranging parties still get the full quote list; the assigned
     // transporter gets their own bids only; the non-arranging buyer/seller
-    // gets an aggregate summary; everyone else gets nothing.
-    const visibleOrder = applySealedBidVisibility(order, req.user.id, req.user.roles || []);
+    // gets an aggregate summary; everyone else gets nothing. The helper is
+    // now async because it also re-hydrates the transporter's phone for the
+    // seller / transporter / admin viewers only.
+    const visibleOrder = await applySealedBidVisibility(order, req.user.id, req.user.roles || []);
 
     return res.json({
       order: {
@@ -1048,7 +1077,7 @@ router.patch('/:id/confirm-receipt', authenticate, idempotency('orders.confirm-r
     });
 
     // FIXED: apply the same sealed-bid visibility to the post-receipt response.
-    const visibleOrder = applySealedBidVisibility(updatedOrder, req.user.id, req.user.roles || []);
+    const visibleOrder = await applySealedBidVisibility(updatedOrder, req.user.id, req.user.roles || []);
 
     return res.json({ message: 'Receipt confirmed. Order completed.', order: visibleOrder });
   } catch (error) {
@@ -1163,7 +1192,7 @@ router.patch(
       }
 
       // FIXED: same sealed-bid visibility on the cancel response.
-      const visibleOrder = applySealedBidVisibility(updated, req.user.id, req.user.roles || []);
+      const visibleOrder = await applySealedBidVisibility(updated, req.user.id, req.user.roles || []);
 
       return res.json({ message: 'Order cancelled.', order: visibleOrder });
     } catch (error) {
