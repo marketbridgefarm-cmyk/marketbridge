@@ -50,6 +50,23 @@ import {
   leafQuotes,
 } from './order-details/orderDetailUtils.js';
 
+import {
+  Modal,
+  Card,
+  Section,
+  Avatar,
+  PartyBadge,
+  Pill,
+  Finding,
+  Facts,
+  Fact,
+  YouTag,
+  Actions,
+  SideLabel,
+  Notice,
+  Button,
+} from './order-details/OrderDetailPrimitives.jsx';
+
 const PAYMENT_METHODS = [
   { value: 'TELEBIRR', label: 'Telebirr via Chapa' },
   { value: 'QR', label: 'QR Code' },
@@ -98,126 +115,6 @@ function useNowUntil(targetMs) {
 /* ========================================================================
    2. UI primitives
    ======================================================================== */
-
-function Modal({ isOpen, onClose, title, children }) {
-  if (!isOpen) return null;
-  return (
-    <div className="od-modal-backdrop" onClick={onClose}>
-      <div className="od-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="od-modal-head">
-          <span className="od-modal-title">{title}</span>
-          <button type="button" className="od-modal-close" onClick={onClose} aria-label="Close modal">
-            ×
-          </button>
-        </div>
-        <div className="od-modal-body">
-          {children}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Card({ id, eyebrow, eyebrowClass, title, subtitle, side, tone, className, children }) {
-  return (
-    <section className={`card${tone ? ` od-card-${tone}` : ''}${className ? ` ${className}` : ''}`} id={id}>
-      <header className="od-card-head">
-        <div className="od-card-head-main">
-          {eyebrow && <span className={`od-eyebrow${eyebrowClass ? ` ${eyebrowClass}` : ''}`}>{eyebrow}</span>}
-          <h2 className="od-card-title">{title}</h2>
-          {subtitle && <p className="od-card-subtitle">{subtitle}</p>}
-        </div>
-        {side && <div className="od-card-head-side">{side}</div>}
-      </header>
-      {children}
-    </section>
-  );
-}
-
-function Section({ title, meta, strong, children }) {
-  return (
-    <div className="od-card-section">
-      {(title || meta) && (
-        <div className="od-card-section-head">
-          <h3 className="od-card-section-title">{title}</h3>
-          {meta != null && (
-            <div className={`od-card-section-meta${strong ? ' is-strong' : ''}`}>
-              {meta}
-            </div>
-          )}
-        </div>
-      )}
-      {children}
-    </div>
-  );
-}
-
-const Avatar = ({ name, small }) => (
-  <span className={`od-party-avatar${small ? ' od-party-avatar--sm' : ''}`} aria-hidden="true">
-    {initials(name)}
-  </span>
-);
-
-function PartyBadge({ role, name }) {
-  return (
-    <div className="od-card-side-party">
-      <div>
-        <span className="od-card-side-label">{role}</span>
-        <span className="od-card-side-value">{name || '—'}</span>
-      </div>
-      <Avatar name={name} />
-    </div>
-  );
-}
-
-const Finding = ({ text, empty }) =>
-  text ? <span className="od-finding-flag">{text}</span> : <Pill tone="good" dot={false}>{empty}</Pill>;
-
-const Facts = ({ children }) => <div className="od-detail-facts">{children}</div>;
-
-const Fact = ({ name, children }) => (
-  <div>
-    <span>{name}</span>
-    <strong>{children}</strong>
-  </div>
-);
-
-const Pill = ({ tone = 'neutral', dot = true, children }) => (
-  <span className={`od-status-pill od-tone-${tone}`}>
-    {dot && <span className="od-status-pill-dot" aria-hidden="true" />}
-    {children}
-  </span>
-);
-
-const YouTag = ({ inline }) => <span className={`od-party-you${inline ? ' od-party-you-inline' : ''}`}>You</span>;
-
-const Actions = ({ children }) => <div className="od-actions">{children}</div>;
-
-const SideLabel = ({ name, children }) => (
-  <>
-    <span className="od-card-side-label">{name}</span>
-    {children}
-  </>
-);
-
-function Notice({ title, children }) {
-  return (
-    <div className="od-notice">
-      {title && <strong>{title}</strong>}
-      {children}
-    </div>
-  );
-}
-
-const Button = ({ variant = 'default', size, busy, busyText, children, ...rest }) => (
-  <button
-    type="button"
-    className={`btn${variant !== 'default' ? ` btn-${variant}` : ''}${size ? ` btn-${size}` : ''}`}
-    {...rest}
-  >
-    {busy ? busyText : children}
-  </button>
-);
 
 /* ========================================================================
    3. Payout card
