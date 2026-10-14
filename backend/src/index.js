@@ -35,6 +35,8 @@ const transportRoutes = require('./routes/transport');
 
 const orderRoutes = require('./routes/orders');
 const orderPriceReviewsRoutes = require('./routes/orderPriceReviews');
+const orderLifecycleRoutes = require('./routes/orderLifecycle');
+
 const paymentRoutes = require('./routes/payments');
 const adRoutes = require('./routes/ads');
 const disputeRoutes = require('./routes/disputes');
@@ -362,6 +364,7 @@ app.use('/api/transport', transportRoutes);
 
 app.use('/api/orders', orderRoutes);
 app.use('/api/orders', orderPriceReviewsRoutes);
+app.use('/api/orders', orderLifecycleRoutes);
 
 // Payment routes.
 //
