@@ -65,6 +65,7 @@ import {
   SideLabel,
   Notice,
   Button,
+  useNowUntil,
 } from './order-details/OrderDetailPrimitives.jsx';
 
 const PAYMENT_METHODS = [
@@ -95,21 +96,6 @@ function transportReleaseAvailableAt(quote) {
   const since = new Date(quote.updatedAt || quote.createdAt).getTime();
   if (!Number.isFinite(since)) return null;
   return new Date(since + TRANSPORT_RELEASE_AFTER_HOURS * 60 * 60 * 1000);
-}
-
-function useNowUntil(targetMs) {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    if (!targetMs || Number.isNaN(targetMs)) return undefined;
-    setNow(Date.now());
-    const timer = setInterval(() => {
-      const current = Date.now();
-      setNow(current);
-      if (current >= targetMs) clearInterval(timer);
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [targetMs]);
-  return now;
 }
 
 /* ========================================================================
