@@ -31,6 +31,7 @@ const offerRoutes = require('./routes/offers');
 const inspectionRoutes = require('./routes/inspections');
 
 const inspectionQuotesRoutes = require('./routes/inspectionQuotes');
+const inspectionEvidenceRoutes = require('./routes/inspectionEvidence');
 
 const transportRoutes = require('./routes/transport');
 const transportCoordinationRoutes = require('./routes/transportCoordination');
@@ -359,12 +360,11 @@ app.use('/api/offers', offerRoutes);
 
 app.use('/api/inspections', inspectionRoutes);
 
-app.use('/api/transport', transportRoutes);
+app.use('/api/inspections', inspectionEvidenceRoutes);
 app.use('/api/inspections', inspectionQuotesRoutes);
 
 
-
-
+app.use('/api/transport', transportRoutes);
 app.use('/api/transport', transportCoordinationRoutes);
 
 app.use('/api/transport', transportEvidenceRoutes);
