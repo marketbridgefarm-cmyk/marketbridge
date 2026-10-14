@@ -24,6 +24,14 @@ const {
 } = require('../utils/orderTiming');
 
 const {
+  quoteTurn,
+  isQuoteExpired,
+  quoteExpiry,
+  resolveReleaseWindowHours,
+  computeReleaseAvailableAt,
+} = require('../services/negotiationService');
+
+const {
   noContactInfo,
 } = require('../utils/contactGuard');
 
@@ -122,6 +130,14 @@ class ActiveTruckAssignmentError extends Error {
   }
 }
 
+// Transport-specific release window. Same pure logic as inspections; the
+// only difference is which env var feeds the window length.
+const TRANSPORT_RELEASE_AFTER_HOURS = resolveReleaseWindowHours('TRANSPORT_RELEASE_AFTER_HOURS', 72);
+
+function transportReleaseAvailableAt(quote) {
+  return computeReleaseAvailableAt(quote, TRANSPORT_RELEASE_AFTER_HOURS);
+}
+
 // ============================================================================
 // TRUCK STATE HELPERS
 // ============================================================================
@@ -161,11 +177,7 @@ async function lockTruckRow(tx, truckId) {
 router.post(
   '/trucks',
   authenticate,
-  // FIXED: Any authenticated user can register a truck. Buyers and sellers
-  // who want to use their own vehicle must register it on the platform first.
   [
-    // FIXED: Strict registration format + contact-info leak guard.
-    // Blocks phone numbers (pure 7+ digit strings), emails, URLs, etc.
     body('registration')
       .isString().trim().notEmpty()
       .isLength({ min: 3, max: 15 })
@@ -177,14 +189,11 @@ router.post(
         return true;
       })
       .custom(noContactInfo),
-    // FIXED: Contact-info leak guard. Dropdown on the frontend keeps the
-    // value in a small closed set; this guard catches direct API calls.
     body('truckType')
       .isString().trim().notEmpty()
       .isLength({ min: 2, max: 40 })
       .custom(noContactInfo),
     body('capacity').isFloat({ gt: 0, lt: 200 }),
-    // FIXED: Contact-info leak guard for free-form area text.
     body('operatingArea')
       .optional({ nullable: true })
       .isString().trim()
@@ -222,7 +231,6 @@ router.post(
 router.get(
   '/trucks/mine',
   authenticate,
-  // FIXED: Any authenticated user can list their own trucks.
   async (req, res) => {
     try {
       const trucks = await prisma.truck.findMany({
@@ -241,7 +249,6 @@ router.get(
 router.patch(
   '/trucks/:id/availability',
   authenticate,
-  // FIXED: Any authenticated user can manage their own truck's availability.
   [
     param('id').isUUID(),
     body('availability').isIn(['AVAILABLE', 'BUSY', 'OFFLINE']),
@@ -304,14 +311,6 @@ router.patch(
 
 // ============================================================================
 // OPEN TRANSPORT JOBS (provider side)
-// ----------------------------------------------------------------------------
-// FIXED: Jobs remain visible and biddable from the moment they are requested
-// until the work is delivered or the order is closed. The old filter dropped
-// the job the moment a transport payment even existed (PENDING included), so
-// a single abandoned Chapa checkout permanently hid the job from every other
-// truck owner, contradicting the requirement that the request stays public
-// until the buyer receives the goods. Waiting bids are now null-expiry (see
-// POST /:id/quotes), which keeps the replacement pool alive for the buyer.
 // ============================================================================
 
 router.get(
@@ -323,18 +322,11 @@ router.get(
       const jobs = await prisma.transportJob.findMany({
         where: {
           method: 'HIRE_TRANSPORTER',
-          // FIXED: Keep the job visible until completed, cancelled, or disputed.
-          // This allows new truck owners to bid while work is in progress and
-          // keeps the buyer's waiting list continuously replenished.
           status: { in: ['REQUESTED', 'QUOTED', 'ACCEPTED', 'PICKUP', 'IN_TRANSIT'] },
-          // FIXED: only the order's own terminal states take the job off the
-          // public list. A disputed order is paused; a cancelled or completed
-          // order is done.
           order: {
             status: { notIn: ['DISPUTED', 'CANCELLED', 'COMPLETED'] },
           },
         },
-        // FIXED: Explicitly select only non-sensitive fields
         select: {
           id: true,
           orderId: true,
@@ -346,26 +338,18 @@ router.get(
           requiredCapacity: true,
           specialRequirements: true,
           createdAt: true,
-          // DO NOT SELECT: agreedAmount, sellerPreparationDueAt, buyerLoadingDueAt
           order: {
             select: {
               buyer: { select: { id: true, name: true } },
               seller: { select: { id: true, name: true } },
             },
           },
-          // Provide the active truck owner's name, but NOT their agreed fee
           truckOwner: {
             select: { id: true, name: true, rating: true },
           },
           truck: {
             select: { id: true, registration: true, truckType: true, capacity: true },
           },
-          // FIXED: Only return the quotes belonging to the calling truck owner
-          // (Sealed Bid). The extra fields are required for the dashboard to
-          // (a) find the leaf quote via parentQuoteId, (b) determine whose
-          // turn it is via counteredBy, and (c) surface a correct expiry via
-          // expiresAt. Without them, a countered bid renders as "WAITING" on
-          // the transporter's side even when it is their turn to respond.
           quotes: {
             where: {
               truckOwnerId: req.user.id,
@@ -405,8 +389,6 @@ router.get(
       const jobs = await prisma.transportJob.findMany({
         where: { truckOwnerId: req.user.id },
         include: {
-          // FIXED: expose the loading report status so the transporter's own
-          // job list reflects buyer review state without a second request.
           loadingReport: { select: { id: true, buyerReviewStatus: true, submittedAt: true } },
           order: {
             include: {
@@ -450,7 +432,6 @@ router.get('/match', authenticate, async (req, res) => {
   }
 });
 
-
 // ============================================================================
 // MY ACTIVE QUOTES (provider side)
 // ============================================================================
@@ -491,11 +472,6 @@ router.get(
 
 // ============================================================================
 // CREATE TRANSPORT JOB
-// ----------------------------------------------------------------------------
-// FIXED: Transport is now gated on buyerDecision === 'BUY' (the buyer's
-// purchase commitment), not on the inspection report. What gets transported
-// is goods, not paperwork. Inspection safety is preserved upstream in the
-// buyer-decision endpoint.
 // ============================================================================
 
 router.post(
@@ -549,9 +525,6 @@ router.post(
       const isAgricultural = order.listing?.category === 'AGRICULTURAL';
       const isPhysicalGoods = ['AGRICULTURAL', 'PRODUCT'].includes(order.listing?.category);
 
-      // FIXED: Transport is gated on the buyer's purchase decision, not on
-      // the inspection report. Once the buyer commits (BUY), the goods are
-      // contractually moving and transport can be arranged.
       if (isPhysicalGoods && order.buyerDecision !== 'BUY') {
         return res.status(409).json({
           code: 'BUYER_DECISION_REQUIRED',
@@ -1021,9 +994,6 @@ router.post(
       if (!report) return res.status(409).json({ code: 'LOADING_REPORT_REQUIRED', error: 'The transporter must submit the loading report before it can be approved.' });
       if (job.order.buyerDecision !== 'BUY') return res.status(409).json({ code: 'BUYER_DECISION_REQUIRED', error: 'The buyer must make the final BUY decision first.' });
 
-      // FIXED: The loading-prep report approval is what unlocks goods payment.
-      // Only the transport fee must be settled at this stage; goods payment
-      // is created HERE, after approval.
       const transportPaid = await prisma.payment.findFirst({ where: { transportJobId: job.id, type: 'TRANSPORT', status: 'PAID' }, select: { id: true } });
       if (!transportPaid) return res.status(409).json({ code: 'TRANSPORT_PAYMENT_REQUIRED', error: 'The transporter must be paid before the loading report can be approved.' });
 
@@ -1042,13 +1012,8 @@ router.post(
       await recordAuditEvent(prisma, { actorId: req.user.id, action: 'TRANSPORT_LOADING_CONFIRMED_BY_BUYER', resourceType: 'TransportJob', resourceId: job.id, metadata: { orderId: job.orderId, loadingReportId: report.id } }).catch(() => {});
       await recordOrderEvent(prisma, { orderId: job.orderId, actorId: req.user.id, type: 'TRANSPORT_LOADING_CONFIRMED_BY_BUYER', metadata: { transportJobId: job.id, loadingReportId: report.id } }).catch(() => {});
 
-      // FIXED: The approval of the loading-prep report is the event that
-      // creates the goods payment obligation.
       await syncOrderPaymentObligations(prisma, job.orderId).catch(() => {});
 
-      // FIXED: reset the goods payment deadline now that goods payment
-      // has just been unlocked. Without this the order's paymentDueAt
-      // stays stale and the buyer's payment window is miscomputed.
       await prisma.order.update({
         where: { id: job.orderId },
         data: { paymentDueAt: computePaymentDueAt() },
@@ -1064,11 +1029,6 @@ router.post(
 
 // ============================================================================
 // UPDATE TRANSPORT STATUS
-// ----------------------------------------------------------------------------
-// Cancellation is no longer blocked by a settled transport payment. If the
-// transport was paid, the transaction queues a refund through the normal
-// Chapa flow. Only an in-flight payment (PENDING / PROCESSING) blocks the
-// cancel, so the amount is not duplicated by a second refund request.
 // ============================================================================
 
 router.patch(
@@ -1117,8 +1077,6 @@ router.patch(
         if (!loadingReport) return res.status(409).json({ code: 'LOADING_REPORT_REQUIRED', error: 'The transporter must submit the loading report before pickup.' });
         if (!job.buyerLoadingConfirmedAt) return res.status(409).json({ code: 'BUYER_LOADING_CONFIRMATION_REQUIRED', error: 'The buyer must review and approve the loading report before pickup.' });
 
-        // FIXED: PICKUP means "loaded and awaiting goods payment". The buyer
-        // must settle the seller before the truck can be marked as loaded.
         const goodsPaid = await prisma.payment.findFirst({ where: { orderId: job.orderId, type: 'MARKETPLACE', status: 'PAID' }, select: { id: true } });
         if (!goodsPaid) {
           return res.status(409).json({ code: 'GOODS_PAYMENT_REQUIRED', error: 'The buyer must pay for the goods before the truck can be marked as loaded.' });
@@ -1244,9 +1202,6 @@ router.patch(
           if (freshOrder?.status === 'TRANSPORT_ARRANGED') {
             await transitionOrderStatus(tx, job.orderId, 'TRANSPORT_ARRANGED', 'IN_TRANSIT');
           }
-          // FIXED: if the order is still CONFIRMED (e.g. own-truck path or
-          // legacy data), walk the order through TRANSPORT_ARRANGED so the
-          // state machine's CONFIRMED -> IN_TRANSIT jump is not rejected.
           if (freshOrder?.status === 'CONFIRMED') {
             await transitionOrderStatus(tx, job.orderId, 'CONFIRMED', 'TRANSPORT_ARRANGED');
             await transitionOrderStatus(tx, job.orderId, 'TRANSPORT_ARRANGED', 'IN_TRANSIT');
@@ -1419,9 +1374,6 @@ router.post(
         return res.status(400).json({ error: 'loadingStartedAt cannot be later than loadingFinishedAt' });
       }
 
-      // FIXED: The loading-prep report comes BEFORE goods payment. Its
-      // approval is what unlocks goods payment. Only the transport fee must
-      // be settled at this point.
       const transportPaid = await prisma.payment.findFirst({ where: { transportJobId: job.id, type: 'TRANSPORT', status: 'PAID' }, select: { id: true } });
       if (!transportPaid) return res.status(409).json({ code: 'TRANSPORT_PAYMENT_REQUIRED', error: 'The transporter must be paid before the loading report can be submitted.' });
 
