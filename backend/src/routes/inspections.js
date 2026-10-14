@@ -520,24 +520,10 @@ router.get('/seller-pending', authenticate, requireRole('SELLER'), async (req, r
 
 // ============================================================================
 // SELLER CONFIRMS INSPECTOR ON-SITE (merged)
-// ----------------------------------------------------------------------------
-// Merged from the old POST /:id/seller-confirm + POST /:id/inspector-arrived
-// pair. A single seller action records both:
-//   • inspectorOnSiteConfirmedAt — the inspector physically showed up
-//   • sellerConfirmedAt          — the seller vouches for the work and
-//                                  unlocks the buyer's fee payment
-//
-// Strict prerequisite: both seller and inspector must have submitted their
-// coordination handoff before confirmation is accepted. This enforces
-// "coordination first, then confirm".
-//
-// Lazy-lapse: if the inspector's 3-hour coordination window has expired
-// without a handoff, lapse the agreement BEFORE the main transaction, so
-// the lapse actually commits rather than rolling back with the rejection.
 // ============================================================================
+
 router.post('/:id/seller-confirm', authenticate, requireRole('SELLER'), async (req, res) => {
   try {
-    // ── Lazy-lapse pre-check (outside the main transaction) ────────────────
     const preCheck = await prisma.inspectionRequest.findUnique({
       where: { id: req.params.id },
       include: {
@@ -576,7 +562,6 @@ router.post('/:id/seller-confirm', authenticate, requireRole('SELLER'), async (r
       });
     }
 
-    // ── Main transaction ───────────────────────────────────────────────────
     const result = await prisma.$transaction(async (tx) => {
       const request = await tx.inspectionRequest.findUnique({
         where: { id: req.params.id },
@@ -608,7 +593,6 @@ router.post('/:id/seller-confirm', authenticate, requireRole('SELLER'), async (r
         throw Object.assign(new Error('An agreed inspection fee is required before confirmation'), { statusCode: 409 });
       }
 
-      // STRICT COORDINATION PREREQUISITE
       const coordination = request.coordination;
       if (!coordination || coordination.supersededAt) {
         throw Object.assign(new Error('Coordination must be opened before the inspection can be confirmed'), { statusCode: 409, code: 'COORDINATION_NOT_OPEN' });
@@ -634,8 +618,6 @@ router.post('/:id/seller-confirm', authenticate, requireRole('SELLER'), async (r
           inspectorOnSiteConfirmedAt: null,
         },
         data: {
-          // Both flags set atomically — the seller's single click vouches
-          // for the inspector's on-site presence AND unlocks the fee.
           sellerConfirmedAt: now,
           inspectorOnSiteConfirmedAt: now,
           inspectorOnSiteConfirmedBy: req.user.id,
@@ -645,7 +627,6 @@ router.post('/:id/seller-confirm', authenticate, requireRole('SELLER'), async (r
           lockedBuyerFeeAmount: request.feePayer === 'SELLER' ? null : request.feePayer === 'SPLIT' ? Math.round(Number(request.fee) * 50) / 100 : request.fee,
           lockedSellerFeeAmount: request.feePayer === 'BUYER' ? null : request.feePayer === 'SPLIT' ? Math.round((Number(request.fee) - Math.round(Number(request.fee) * 50) / 100) * 100) / 100 : request.fee,
           workflowDueAt: computeInspectionPaymentDueAt(),
-          // Clear the handoff window now that the confirmation is locked in.
           coordinationDueAt: null,
           startDueAt: null,
           sellerMessage: message || null,
@@ -688,10 +669,6 @@ router.post('/:id/seller-confirm', authenticate, requireRole('SELLER'), async (r
     });
   }
 });
-
-// ============================================================================
-// INSPECTOR ARRIVED — merged into seller-confirm (410 shim)
-// ============================================================================
 
 router.post('/:id/inspector-arrived', authenticate, requireRole('SELLER'), async (req, res) => {
   return res.status(410).json({
