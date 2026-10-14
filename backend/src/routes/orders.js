@@ -18,6 +18,18 @@ const {
 } = require('../services/waitingListService');
 const { getInspectionPriceSuggestion, marketSnapshotData } = require('../services/marketPriceService');
 
+const {
+  userSelect,
+  transportInclude,
+  orderListInclude,
+  orderDetailInclude,
+} = require('../services/orderIncludes');
+
+const {
+  applySealedBidVisibility,
+  capturePendingBidders,
+} = require('../services/orderHelpers');
+
 const router = express.Router();
 
 const validate = (req, res, next) => {
@@ -37,134 +49,6 @@ const NON_CANCELLABLE_STATUSES = ['COMPLETED', 'CANCELLED'];
 // workflow so both sides have a record of why goods that physically moved
 // are being unwound.
 const TRANSPORT_IN_MOTION_STATUSES = ['PICKUP', 'IN_TRANSIT', 'DELIVERED'];
-
-const userSelect = { id: true, name: true, phone: true, location: true, rating: true, verificationStatus: true };
-
-// FIXED: truckOwner.phone is NOT selected here. Every viewer of the order
-// page uses this include, and the buyer must never see the transporter's
-// contact number. The seller needs it (physical handoff), the transporter
-// obviously has their own, and admins need it for support — so it is added
-// back per-request in applySealedBidVisibility() for those three roles only.
-const transportInclude = {
-  loadingReport: { include: { submittedBy: { select: { id: true, name: true } } } },
-  truckOwner: { select: { id: true, name: true, rating: true, verificationStatus: true } },
-  truck: { select: { id: true, registration: true, truckType: true, capacity: true, operatingArea: true, availability: true, verificationStatus: true, rating: true } },
-  quotes: {
-    include: {
-      truckOwner: { select: { id: true, name: true, rating: true, verificationStatus: true } },
-      truck: { select: { id: true, registration: true, truckType: true, capacity: true, operatingArea: true, availability: true, verificationStatus: true, rating: true } },
-      _count: { select: { childQuotes: true } },
-    },
-    orderBy: { amount: 'asc' },
-  },
-};
-
-// ============================================================================
-// LIGHTWEIGHT include for the Orders list page (GET /)
-// ============================================================================
-const orderListInclude = {
-  listing: {
-    select: {
-      id: true,
-      cropType: true,
-      title: true,
-      photos: true,
-    },
-  },
-  buyer: { select: userSelect },
-  seller: { select: userSelect },
-  transportJob: {
-    select: {
-      id: true,
-      status: true,
-      method: true,
-    },
-  },
-  payments: {
-    select: { id: true, type: true, status: true, amount: true, method: true },
-  },
-  _count: {
-    select: { events: true, disputes: true, messages: true },
-  },
-};
-
-// ============================================================================
-// HEAVY include for the Order Detail page (GET /:id)
-// ============================================================================
-const orderDetailInclude = {
-  listing: {
-    include: {
-      inspectionRequests: {
-        where: { status: { not: 'CANCELLED' } },
-        include: {
-          report: true,
-          inspector: { select: { id: true, name: true, phone: true } },
-          payments: { select: { id: true, type: true, status: true, amount: true, method: true, reference: true } },
-          quotes: {
-            where: { status: { not: 'REJECTED' } },
-            select: {
-              id: true, inspectorId: true, amount: true, status: true, message: true,
-              parentQuoteId: true, counterAmount: true, counteredBy: true, expiresAt: true, createdAt: true, updatedAt: true,
-              inspector: { select: { id: true, name: true, rating: true, location: true, verificationStatus: true } },
-              _count: { select: { childQuotes: true } },
-            },
-            orderBy: { createdAt: 'asc' },
-          },
-        },
-      },
-    },
-  },
-  inspectionRequests: {
-    where: { status: { not: 'CANCELLED' } },
-    orderBy: { createdAt: 'desc' },
-    include: {
-      report: true,
-      inspector: { select: { id: true, name: true, phone: true } },
-      payments: { select: { id: true, type: true, status: true, amount: true, method: true, reference: true } },
-      quotes: {
-        where: { status: { not: 'REJECTED' } },
-        select: {
-          id: true, inspectorId: true, amount: true, status: true, message: true, parentQuoteId: true, counterAmount: true, counteredBy: true, expiresAt: true, createdAt: true, updatedAt: true,
-          inspector: { select: { id: true, name: true, rating: true, location: true, verificationStatus: true } },
-          _count: { select: { childQuotes: true } },
-        },
-        orderBy: { createdAt: 'asc' },
-      },
-    },
-  },
-  agreedOffer: true,
-  priceReviews: { include: { proposedBy: { select: { id: true, name: true } } }, orderBy: { createdAt: 'asc' } },
-  buyer: { select: userSelect },
-  seller: { select: userSelect },
-  transportJob: { include: { ...transportInclude, loadingReport: true } },
-  payments: {
-    include: {
-      ledgerEntries: true,
-    },
-  },
-  paymentObligations: {
-    include: {
-      payment: { select: { id: true, status: true, amount: true, method: true, reference: true } },
-      payer: { select: { id: true, name: true } },
-      beneficiary: { select: { id: true, name: true } },
-    },
-    orderBy: { createdAt: 'asc' },
-  },
-  events: {
-    orderBy: { createdAt: 'asc' },
-    take: 50,
-    include: { actor: { select: { id: true, name: true } } },
-  },
-  disputes: true,
-  ratings: true,
-  messages: { orderBy: { createdAt: 'asc' }, take: 50 },
-  recoveryRequests: {
-    where: { status: 'PENDING' },
-    orderBy: { requestedAt: 'desc' },
-    take: 1,
-    select: { id: true, type: true },
-  },
-};
 
 // ============================================================================
 // SEALED-BID VISIBILITY
@@ -189,92 +73,8 @@ const orderDetailInclude = {
 //   - Any other viewer sees an empty quote list — the frontend already
 //     renders a "the requester is reviewing bids" placeholder for them.
 //
-// FIXED: This helper is now async because it re-hydrates the transporter's
-// phone number for the three roles that legitimately need it (seller,
-// assigned transporter, admin). The base transportInclude intentionally
-// omits phone from truckOwner so the buyer never receives it.
-async function applySealedBidVisibility(order, viewerId, viewerRoles = []) {
-  if (!order) return order;
-  const isAdminUser = Array.isArray(viewerRoles) && viewerRoles.includes('ADMIN');
-
-  // ---- Transport quotes ---------------------------------------------------
-  const job = order.transportJob;
-
-  // FIXED: re-add the transporter's phone number for the two roles that
-  // legitimately need it — the seller (physical handoff) and the assigned
-  // transporter (their own record) — plus admins for support. The buyer
-  // receives only the name.
-  if (job && job.truckOwner) {
-    const isSellerOfOrder = order.sellerId === viewerId;
-    const isAssignedTransporter = job.truckOwnerId === viewerId;
-    if (isSellerOfOrder || isAssignedTransporter || isAdminUser) {
-      const owner = await prisma.user.findUnique({
-        where: { id: job.truckOwner.id },
-        select: { phone: true },
-      }).catch(() => null);
-      if (owner?.phone) job.truckOwner.phone = owner.phone;
-    }
-  }
-
-  if (job) {
-    const isBuyer = order.buyerId === viewerId;
-    const isSeller = order.sellerId === viewerId;
-    const isArranging =
-      (job.arrangingParty === 'SELLER' && isSeller) ||
-      (job.arrangingParty === 'BUYER' && isBuyer) ||
-      (job.arrangingParty === 'JOINT' && (isBuyer || isSeller));
-    const isAssignedTruckOwner = job.truckOwnerId === viewerId;
-    const allTransportQuotes = Array.isArray(job.quotes) ? job.quotes : [];
-
-    if (!isAdminUser && !isArranging) {
-      if (isAssignedTruckOwner) {
-        // The assigned transporter sees their own bids only.
-        job.quotes = allTransportQuotes.filter((q) => q.truckOwnerId === viewerId);
-      } else if (isBuyer || isSeller) {
-        // The non-arranging buyer or seller gets an aggregate summary only.
-        const leafQuotes = allTransportQuotes.filter(
-          (q) => (q._count?.childQuotes || 0) === 0
-        );
-        const liveQuotes = leafQuotes.filter((q) =>
-          ['PENDING', 'WAITING', 'SELECTED', 'COUNTERED', 'ACCEPTED'].includes(q.status)
-        );
-        const acceptedCount = liveQuotes.filter((q) => q.status === 'ACCEPTED').length;
-        const transportPaid = (order.payments || []).some(
-          (p) => p.type === 'TRANSPORT' && p.status === 'PAID'
-        );
-
-        job.quotes = [];
-        job.quoteSummary = {
-          bidderCount: liveQuotes.length,
-          acceptedCount,
-          transportPaid,
-          agreedAmount: acceptedCount > 0 ? job.agreedAmount : null,
-        };
-      } else {
-        // Any other viewer (e.g. the assigned inspector) gets nothing about
-        // the transport quotes — not even the summary.
-        job.quotes = [];
-      }
-    }
-  }
-
-  // ---- Inspection quotes --------------------------------------------------
-  const inspectionLists = [
-    ...(Array.isArray(order.inspectionRequests) ? order.inspectionRequests : []),
-    ...(Array.isArray(order.listing?.inspectionRequests) ? order.listing.inspectionRequests : []),
-  ];
-  for (const request of inspectionLists) {
-    if (!request || !Array.isArray(request.quotes)) continue;
-    const isRequester = request.requestedById === viewerId;
-    if (isAdminUser || isRequester) continue;
-    const isAssignedInspector = request.inspectorId === viewerId;
-    request.quotes = isAssignedInspector
-      ? request.quotes.filter((q) => q.inspectorId === viewerId)
-      : [];
-  }
-
-  return order;
-}
+// The implementation now lives in ../services/orderHelpers.js and is imported
+// at the top of this file.
 
 // ============================================================================
 // POST /api/orders/buy-now — intentionally disabled
@@ -417,9 +217,7 @@ router.get('/:id', authenticate, async (req, res) => {
     // FIXED: strip sealed-bid details before the order leaves the server.
     // Admins and arranging parties still get the full quote list; the assigned
     // transporter gets their own bids only; the non-arranging buyer/seller
-    // gets an aggregate summary; everyone else gets nothing. The helper is
-    // now async because it also re-hydrates the transporter's phone for the
-    // seller / transporter / admin viewers only.
+    // gets an aggregate summary; everyone else gets nothing.
     const visibleOrder = await applySealedBidVisibility(order, req.user.id, req.user.roles || []);
 
     return res.json({
@@ -721,40 +519,6 @@ router.patch('/:id/price-reviews/:reviewId/respond', authenticate, idempotency('
 // ============================================================================
 // PATCH /api/orders/:id/buyer-decision
 // ============================================================================
-
-// Captures the still-PENDING waiting bidders across inspection and transport
-// scopes before an order is cancelled. cancelOrderInTransaction moves every
-// PENDING quote to REJECTED inside its own transaction, so this snapshot must
-// be taken before that runs and used to notify the bidders after commit.
-async function capturePendingBidders(orderId) {
-  const order = await prisma.order.findUnique({
-    where: { id: orderId },
-    select: {
-      listingId: true,
-      inspectionRequests: {
-        where: { status: { not: 'CANCELLED' } },
-        select: {
-          id: true,
-          quotes: {
-            where: { status: 'PENDING', childQuotes: { none: {} } },
-            select: { id: true, inspectorId: true },
-          },
-        },
-      },
-      transportJob: {
-        select: {
-          id: true,
-          status: true,
-          quotes: {
-            where: { status: 'PENDING', childQuotes: { none: {} } },
-            select: { id: true, truckOwnerId: true },
-          },
-        },
-      },
-    },
-  }).catch(() => null);
-  return order;
-}
 
 router.patch(
   '/:id/buyer-decision',
