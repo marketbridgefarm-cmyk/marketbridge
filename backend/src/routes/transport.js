@@ -426,7 +426,12 @@ router.get(
           truck: {
             select: { id: true, registration: true, truckType: true, capacity: true },
           },
-          // FIXED: Only return the quotes belonging to the calling truck owner (Sealed Bid)
+          // FIXED: Only return the quotes belonging to the calling truck owner
+          // (Sealed Bid). The extra fields are required for the dashboard to
+          // (a) find the leaf quote via parentQuoteId, (b) determine whose
+          // turn it is via counteredBy, and (c) surface a correct expiry via
+          // expiresAt. Without them, a countered bid renders as "WAITING" on
+          // the transporter's side even when it is their turn to respond.
           quotes: {
             where: {
               truckOwnerId: req.user.id,
@@ -437,6 +442,11 @@ router.get(
               status: true,
               message: true,
               createdAt: true,
+              updatedAt: true,
+              parentQuoteId: true,
+              counterAmount: true,
+              counteredBy: true,
+              expiresAt: true,
             },
             orderBy: { createdAt: 'desc' },
           },
