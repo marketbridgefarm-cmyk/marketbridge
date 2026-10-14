@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 
 import { initials } from './orderDetailUtils.js';
 
@@ -132,3 +132,18 @@ export const Button = ({ variant = 'default', size, busy, busyText, children, ..
     {busy ? busyText : children}
   </button>
 );
+
+export function useNowUntil(targetMs) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!targetMs || Number.isNaN(targetMs)) return undefined;
+    setNow(Date.now());
+    const timer = setInterval(() => {
+      const current = Date.now();
+      setNow(current);
+      if (current >= targetMs) clearInterval(timer);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [targetMs]);
+  return now;
+}
