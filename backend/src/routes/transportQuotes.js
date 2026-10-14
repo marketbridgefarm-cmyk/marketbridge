@@ -125,6 +125,33 @@ function transportReleaseAvailableAt(quote) {
 }
 
 // ============================================================================
+// COUNTER-CHAIN CAP
+// ----------------------------------------------------------------------------
+// A counter-offer can legitimately go back and forth — but not forever.
+// After MAX_COUNTER_ROUNDS counters (plus the initial bid), the negotiation
+// must resolve one way or another: accept the current price, reject it, or
+// let the 12-hour expiry close it. Prevents endless ping-pong.
+// ============================================================================
+const MAX_COUNTER_ROUNDS = 4;
+
+async function countCounterDepth(tx, leafQuoteId) {
+  let depth = 0;
+  let cursor = leafQuoteId;
+  let safety = 0;
+  while (cursor && safety < 50) {
+    const row = await tx.transportQuote.findUnique({
+      where: { id: cursor },
+      select: { parentQuoteId: true },
+    });
+    if (!row?.parentQuoteId) break;
+    depth += 1;
+    cursor = row.parentQuoteId;
+    safety += 1;
+  }
+  return depth;
+}
+
+// ============================================================================
 // SUBMIT TRANSPORT QUOTE
 // ============================================================================
 
@@ -818,6 +845,19 @@ router.post(
         }
         if (quoteTurn(freshQuote) !== effectiveRole) {
           throw quoteError('It is the other party\u2019s turn to respond to this negotiation', 409);
+        }
+
+        // FIXED: cap the counter-offer chain. After MAX_COUNTER_ROUNDS
+        // counters (plus the initial bid), further counters are refused —
+        // the parties must accept, reject, or let it expire.
+        const counterDepth = await countCounterDepth(tx, freshQuote.id);
+        if (counterDepth >= MAX_COUNTER_ROUNDS) {
+          const err = new Error(
+            `This negotiation has reached the maximum of ${MAX_COUNTER_ROUNDS} counter-offers. Accept the current price or reject the negotiation.`
+          );
+          err.statusCode = 409;
+          err.code = 'MAX_COUNTER_ROUNDS_REACHED';
+          throw err;
         }
 
         await tx.transportQuote.update({
