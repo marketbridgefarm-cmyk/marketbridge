@@ -179,7 +179,9 @@ export default function ActionCenter({
   const stageCurrent = stages.findIndex((s) => !s.done);
 
   /* ---- Header status text + tone (plain colored text, no pill) --------- */
-  const currentStageLabel = stageCurrent >= 0 ? stages[stageCurrent].label : 'Completed';
+  // The stage the order has REACHED (last completed one), not the next one to
+  // happen: an order that is only placed reads "Ordered", a paid order "Paid", etc.
+  const currentStageLabel = [...stages].reverse().find((s) => s.done)?.label || 'Ordered';
 
   const statusLabel =
     status === 'CANCELLED' ? 'Cancelled' :
