@@ -1291,23 +1291,49 @@ export default function OrderDetail() {
             />
           </div>
 
+          {/* Lead card ("what do I do now?"): full width, directly under the overview. */}
+          {(workflow || isBuyer) ? (
+            <div className="od-span-all">
+              <ActionCenter
+                workflow={workflow}
+                onScroll={goToSection}
+                onActionComplete={reload}
+                orderStatus={order.status}
+                marketplacePaid={marketplacePaid}
+                transportDelivered={transportJob?.status === 'DELIVERED'}
+                buyerGuide={isBuyer ? {
+                  order,
+                  flags: {
+                    isProduct,
+                    inspectionApplies,
+                    inspectionGateMet,
+                    decisionGateMet,
+                    transportJob,
+                    hiredTransport,
+                    acceptedQuote,
+                    transportPaid,
+                    marketplacePaid,
+                  },
+                } : null}
+              />
+            </div>
+          ) : (
+            isInspector && (
+              <div className="od-span-all">
+                <Card id="next-action" tone="accent" eyebrow="Next step" title="Inspector action">
+                  {assignedInspection.status === 'ACCEPTED' && <p>Start the accepted inspection.</p>}
+                  {assignedInspection.status === 'IN_PROGRESS' && <p>Complete the inspection and publish the evidence report.</p>}
+                  {assignedInspection.status === 'COMPLETED' && <p>The report is published. The buyer can now complete any required inspection payment and continue.</p>}
+                  <Actions><Link className="btn btn-primary" to="/dashboard/inspector">Open inspection dashboard</Link></Actions>
+                </Card>
+              </div>
+            )
+          )}
+
           {isBuyer && (
             <div className="od-span-all">
               <BuyerConfidenceCard order={order} recoveryRequests={recoveryRequests} />
             </div>
-          )}
-
-          {workflow ? (
-            <ActionCenter workflow={workflow} onScroll={goToSection} onActionComplete={reload} />
-          ) : (
-            isInspector && (
-              <Card id="next-action" tone="accent" eyebrow="Next step" title="Inspector action">
-                {assignedInspection.status === 'ACCEPTED' && <p>Start the accepted inspection.</p>}
-                {assignedInspection.status === 'IN_PROGRESS' && <p>Complete the inspection and publish the evidence report.</p>}
-                {assignedInspection.status === 'COMPLETED' && <p>The report is published. The buyer can now complete any required inspection payment and continue.</p>}
-                <Actions><Link className="btn btn-primary" to="/dashboard/inspector">Open inspection dashboard</Link></Actions>
-              </Card>
-            )
           )}
 
           {isProduct && isBuyer && !order.agreedOfferId && (
