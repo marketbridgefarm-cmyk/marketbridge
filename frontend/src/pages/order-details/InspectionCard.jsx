@@ -1,6 +1,7 @@
 import React from 'react';
 
 import AmountPicker from '../../components/AmountPicker.jsx';
+import EvidenceGallery from '../../components/EvidenceGallery.jsx';
 import OrderDecisionPanel from '../../components/OrderDecisionPanel.jsx';
 import { InspectionRequestSummary } from '../../components/RequestScopeSummary.jsx';
 import ReleaseAgreementControl from './OrderDetailReleaseControl.jsx';
@@ -80,6 +81,17 @@ export default function InspectionCard({ order, title, i }) {
   const inspectionDate =
     report?.inspectedAt || report?.completedAt || request.completedAt || request.updatedAt || request.createdAt || null;
 
+  // What the inspector actually verified on site (not the seller's listed figure).
+  const listingUnit = order.listing?.unit || 'units';
+  const variance = report?.quantityVariancePercent;
+  const verifiedQuantity = report && report.quantity != null
+    ? `${report.quantity} ${listingUnit}${variance != null && Number.isFinite(Number(variance))
+        ? ` (${Number(variance) > 0 ? '+' : ''}${Number(variance).toFixed(1)}% vs listed)`
+        : ''}`
+    : '—';
+  const qualityFlags = Array.isArray(report?.qualityFlags) ? report.qualityFlags : [];
+  const addenda = Array.isArray(report?.addenda) ? report.addenda : [];
+
   const side = inspectorName ? (
     <PartyBadge role="Inspector" name={inspectorName} />
   ) : (
@@ -129,7 +141,10 @@ export default function InspectionCard({ order, title, i }) {
       <Section title="Inspection details" meta={`INS ${shortId(request.id).toUpperCase()}`}>
         <Facts>
           {reportReady && <Fact name="Product">{order.listing?.cropType || title}</Fact>}
-          {reportReady && <Fact name="Quantity">{order.listing?.quantity != null ? `${order.listing.quantity} units` : '—'}</Fact>}
+          {reportReady && <Fact name="Listed quantity">{order.listing?.quantity != null ? `${order.listing.quantity} ${listingUnit}` : '—'}</Fact>}
+          {reportReady && <Fact name="Verified quantity">{verifiedQuantity}</Fact>}
+          {reportReady && report.grade && <Fact name="Grade">{report.grade}</Fact>}
+          {reportReady && report.moisture != null && <Fact name="Moisture">{`${report.moisture}%`}</Fact>}
           {reportReady && <Fact name="Location">{order.listing?.location || '—'}</Fact>}
           <Fact name="Requested by">{request.mode === 'SELLER_REQUESTED' ? 'Seller' : 'Buyer'}</Fact>
           <Fact name="Requested on">{formatDateTime(request.createdAt)}</Fact>
@@ -424,8 +439,44 @@ export default function InspectionCard({ order, title, i }) {
               <Fact name="Visible defects"><Finding text={report.visibleDefects} empty="No defects" /></Fact>
               <Fact name="Damage notes"><Finding text={report.damageNotes} empty="No damage" /></Fact>
               <Fact name="Packaging"><Finding text={report.packagingNotes} empty="Fully packed" /></Fact>
+              {qualityFlags.length > 0 && (
+                <Fact name="Quality flags">
+                  {qualityFlags.map((flag) => (
+                    <span key={flag} className="od-finding-flag">{label(flag)}</span>
+                  ))}
+                </Fact>
+              )}
             </Facts>
+            {report.assessmentSummary && (
+              <div className="od-mt-12">
+                <span className="muted small">Inspector&apos;s assessment</span>
+                <p style={{ whiteSpace: 'pre-wrap' }}>{report.assessmentSummary}</p>
+              </div>
+            )}
           </Section>
+
+          <Section title="Inspection evidence">
+            <EvidenceGallery
+              listUrl={`/inspections/${request.id}/evidence`}
+              mediaUrl={(evidenceId) => `/inspections/${request.id}/evidence/${evidenceId}/media`}
+            />
+          </Section>
+
+          {addenda.length > 0 && (
+            <Section title="Report addenda" meta={`${addenda.length}`}>
+              <p className="muted small">
+                The inspector added these notes after the report was published. The original report is unchanged.
+              </p>
+              {addenda.map((a) => (
+                <div key={a.id} className="od-mt-12">
+                  <strong>{a.reason}</strong>
+                  <span className="muted small"> · {formatDateTime(a.createdAt)}</span>
+                  <p style={{ whiteSpace: 'pre-wrap' }}>{a.notes}</p>
+                  {a.gpsLocation && <p className="muted small">GPS: {a.gpsLocation}</p>}
+                </div>
+              ))}
+            </Section>
+          )}
 
           {i.isParticipant && (
             <OrderDecisionPanel
