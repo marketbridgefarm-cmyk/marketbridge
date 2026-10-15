@@ -589,6 +589,55 @@ router.post(
   }
 );
 
+// Replace the backup codes. Needs the password AND a current authenticator code
+// (not a backup code), so a stolen session alone cannot mint fresh codes.
+router.post(
+  '/mfa/backup-codes/regenerate',
+  authLimiter,
+  authenticate,
+  [
+    body('password').isString().notEmpty(),
+    body('code').isString().trim().isLength({ min: 4, max: 12 }),
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ error: 'Validation failed', errors: errors.array() });
+      }
+
+      if (!req.user.mfaEnabled) {
+        return res.status(400).json({ error: 'MFA is not enabled on this account.' });
+      }
+
+      const passwordOk = await bcrypt.compare(req.body.password, req.user.passwordHash);
+      if (!passwordOk) {
+        return res.status(401).json({ error: 'Incorrect password' });
+      }
+
+      if (!verifyTotp(req.user.mfaSecret, req.body.code)) {
+        return res.status(401).json({ error: 'Invalid authentication code', code: 'INVALID_MFA_CODE' });
+      }
+
+      const backupCodes = generateBackupCodes();
+      const hashed = await hashBackupCodes(backupCodes);
+
+      await prisma.user.update({
+        where: { id: req.user.id },
+        data: { mfaBackupCodes: hashed },
+      });
+
+      return res.json({
+        message: 'New backup codes generated. Previous codes no longer work.',
+        backupCodes,
+      });
+    } catch (error) {
+      req.log.error({ err: error }, 'MFA backup-code regenerate error:');
+      return res.status(500).json({ error: 'Could not regenerate backup codes' });
+    }
+  }
+);
+
 // ============================================================================
 // PASSWORD RECOVERY
 // ============================================================================

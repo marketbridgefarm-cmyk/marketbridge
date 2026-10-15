@@ -6,6 +6,7 @@ const { idempotency } = require('../middleware/idempotency');
 
 const { validators: createOfferValidators, createOffer } = require('./offerHandlers/createOffer');
 const { myOffers } = require('./offerHandlers/myOffers');
+const { receivedOffers } = require('./offerHandlers/receivedOffers');
 const { listingOffers } = require('./offerHandlers/listingOffers');
 const { listNotices, markNoticesRead } = require('./offerHandlers/notices');
 const { reopenBidding } = require('./offerHandlers/reopenBidding');
@@ -19,7 +20,7 @@ const { respondToOffer } = require('./offerHandlers/respondToOffer');
 //   services/offers/offerHelpers.js   shared predicates, timing and leaf resolution
 //   services/offers/offerOrderService.js   provisional agreement + order creation
 //
-// ORDER MATTERS: the literal paths ('/mine', '/notices', '/listing/...') must be
+// ORDER MATTERS: the literal paths ('/mine', '/received', '/notices', '/listing/...') must be
 // registered before the catch-all PATCH '/:id'.
 
 const router = express.Router();
@@ -36,6 +37,9 @@ router.post(
 
 // Buyer: my offers
 router.get('/mine', authenticate, myOffers);
+
+// Seller: offers received on my listings (dashboard)
+router.get('/received', authenticate, receivedOffers);
 
 // Offers on a listing (seller/admin see all, buyers see their own)
 router.get('/listing/:listingId', authenticate, listingOffers);
