@@ -29,9 +29,14 @@ const authRoutes = require('./routes/auth');
 const listingRoutes = require('./routes/listings');
 const offerRoutes = require('./routes/offers');
 const inspectionRoutes = require('./routes/inspections');
-
+const inspectionQuotesRoutes = require('./routes/inspectionQuotes');
+const inspectionCoordinationRoutes = require('./routes/inspectionCoordination');
+const inspectionEvidenceRoutes = require('./routes/InspectionEvidence');
 
 const transportRoutes = require('./routes/transport');
+const transportQuotesRoutes = require('./routes/transportQuotes');
+const transportCoordinationRoutes = require('./routes/transportCoordination');
+const transportEvidenceRoutes = require('./routes/transportEvidence');
 
 const orderRoutes = require('./routes/orders');
 const orderPriceReviewsRoutes = require('./routes/orderPriceReviews');
@@ -357,9 +362,18 @@ app.use('/api/listings', listingRoutes);
 app.use('/api/offers', offerRoutes);
 
 app.use('/api/inspections', inspectionRoutes);
-
+// Inspection sub-routers (quotes/negotiation, coordination, evidence + reports).
+// Same /api/inspections prefix; none of their paths overlap with inspections.js.
+app.use('/api/inspections', inspectionQuotesRoutes);
+app.use('/api/inspections', inspectionCoordinationRoutes);
+app.use('/api/inspections', inspectionEvidenceRoutes);
 
 app.use('/api/transport', transportRoutes);
+// Transport sub-routers (quotes/negotiation, pickup coordination, evidence).
+// Same /api/transport prefix; none of their paths overlap with transport.js.
+app.use('/api/transport', transportQuotesRoutes);
+app.use('/api/transport', transportCoordinationRoutes);
+app.use('/api/transport', transportEvidenceRoutes);
 
 
 app.use('/api/orders', orderRoutes);
