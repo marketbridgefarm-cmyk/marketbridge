@@ -70,13 +70,24 @@ const orderListInclude = {
 // ============================================================================
 // HEAVY include for the Order Detail page (GET /:id)
 // ============================================================================
+// Full inspection report for the order page, plus any addenda the inspector
+// added after publishing (addendum media is not exposed here).
+const REPORT_INCLUDE = {
+  include: {
+    addenda: {
+      orderBy: { createdAt: 'asc' },
+      select: { id: true, reason: true, notes: true, gpsLocation: true, createdAt: true },
+    },
+  },
+};
+
 const orderDetailInclude = {
   listing: {
     include: {
       inspectionRequests: {
         where: { status: { not: 'CANCELLED' } },
         include: {
-          report: true,
+          report: REPORT_INCLUDE,
           inspector: { select: { id: true, name: true, phone: true } },
           payments: { select: { id: true, type: true, status: true, amount: true, method: true, reference: true } },
           quotes: {
@@ -97,7 +108,7 @@ const orderDetailInclude = {
     where: { status: { not: 'CANCELLED' } },
     orderBy: { createdAt: 'desc' },
     include: {
-      report: true,
+      report: REPORT_INCLUDE,
       inspector: { select: { id: true, name: true, phone: true } },
       payments: { select: { id: true, type: true, status: true, amount: true, method: true, reference: true } },
       quotes: {
