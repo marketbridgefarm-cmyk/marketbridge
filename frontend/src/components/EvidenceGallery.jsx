@@ -60,7 +60,11 @@ export default function EvidenceGallery({ listUrl, mediaUrl }) {
           {item.notes && <p className="small">{item.notes}</p>}
           {item.gpsLocation && <p className="muted small">GPS: {item.gpsLocation}</p>}
 
-          {!signed[item.id] ? (
+          {item.mediaLocked ? (
+            <p className="muted small">
+              Photos and videos unlock once the goods payment is settled.
+            </p>
+          ) : !signed[item.id] ? (
             <button
               type="button"
               className="btn btn-light btn-sm"
