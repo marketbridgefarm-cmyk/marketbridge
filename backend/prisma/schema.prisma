@@ -497,6 +497,11 @@ model User {
   payouts        Payout[] @relation("PayoutPayee")
   payoutsHandled Payout[] @relation("PayoutHandler")
 
+  // Growth: promotions and referrals (see migration 202609150002_growth_promotions_referrals).
+  promotionRedemptions PromotionRedemption[]
+  referralCode         ReferralCode?
+  referralClaims       ReferralClaim[]
+
   @@index([email])
   @@index([accountStatus])
   @@index([verificationStatus])
@@ -1132,6 +1137,13 @@ model Order {
 
   priceReviews PriceReview[]
 
+  // Growth: promotion applied to this order (nullable; zero discount by default).
+  discountAmount      Decimal              @default(0) @db.Decimal(18, 2)
+  promotionCode       PromotionCode?       @relation(fields: [promotionCodeId], references: [id], onDelete: SetNull)
+  promotionCodeId     String?
+  promotionRedemption PromotionRedemption?
+
+  @@index([promotionCodeId])
   @@index([buyerId])
   @@index([sellerId])
   @@index([listingId])
@@ -2552,4 +2564,74 @@ model ProviderStanding {
 
   @@index([status, suspendedUntil])
   @@index([status, probationUntil])
+}
+
+// ============================================================================
+// GROWTH: PROMOTIONS & REFERRALS
+// Mirrors prisma/migrations/202609150002_growth_promotions_referrals.
+// ============================================================================
+
+enum PromotionDiscountType {
+  PERCENTAGE
+  FIXED
+}
+
+model PromotionCode {
+  id              String                @id @default(uuid())
+  code            String                @unique
+  discountType    PromotionDiscountType
+  discountValue   Decimal               @db.Decimal(18, 2)
+  maxDiscount     Decimal?              @db.Decimal(18, 2)
+  minimumSubtotal Decimal               @default(0) @db.Decimal(18, 2)
+  maxUses         Int?
+  usedCount       Int                   @default(0)
+  active          Boolean               @default(true)
+  startsAt        DateTime
+  endsAt          DateTime
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  redemptions PromotionRedemption[]
+  orders      Order[]
+
+  @@index([active, startsAt, endsAt])
+}
+
+model PromotionRedemption {
+  id              String   @id @default(uuid())
+  promotionCode   PromotionCode @relation(fields: [promotionCodeId], references: [id], onDelete: Cascade)
+  promotionCodeId String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId          String
+  order           Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  orderId         String?  @unique
+  discountAmount  Decimal  @db.Decimal(18, 2)
+  createdAt       DateTime @default(now())
+
+  @@unique([promotionCodeId, userId])
+  @@index([userId, createdAt])
+}
+
+model ReferralCode {
+  id         String   @id @default(uuid())
+  code       String   @unique
+  owner      User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  ownerId    String   @unique
+  claimCount Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  claims ReferralClaim[]
+}
+
+model ReferralClaim {
+  id             String       @id @default(uuid())
+  referralCode   ReferralCode @relation(fields: [referralCodeId], references: [id], onDelete: Cascade)
+  referralCodeId String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId         String
+  createdAt      DateTime     @default(now())
+
+  @@unique([referralCodeId, userId])
+  @@index([userId, createdAt])
 }
