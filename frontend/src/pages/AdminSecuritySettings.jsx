@@ -14,6 +14,7 @@ export default function AdminSecuritySettings() {
   const [confirmCode, setConfirmCode] = useState('');
   const [backupCodes, setBackupCodes] = useState(null);
   const [password, setPassword] = useState('');
+  const [mfaCode, setMfaCode] = useState(''); // authenticator (or backup) code for sensitive actions
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
@@ -25,8 +26,9 @@ export default function AdminSecuritySettings() {
     setMessage('');
     setBusy(true);
     try {
-      const res = await api.post('/auth/mfa/setup/start');
-      setSetupData(res.data);
+      const res = await api.post('/auth/mfa/setup');
+      // Backend returns { secret, otpAuthUri, qrCodeDataUrl }.
+      setSetupData({ ...res.data, qrDataUrl: res.data.qrCodeDataUrl });
       setBackupCodes(null);
     } catch (e) {
       setError(e.response?.data?.error || 'Failed to start MFA setup');
@@ -40,10 +42,11 @@ export default function AdminSecuritySettings() {
     setError('');
     setBusy(true);
     try {
-      const res = await api.post('/auth/mfa/setup/confirm', { code: confirmCode });
+      const res = await api.post('/auth/mfa/verify-setup', { code: confirmCode, password });
       setBackupCodes(res.data.backupCodes);
       setSetupData(null);
       setConfirmCode('');
+      setPassword('');
       await refreshUser();
     } catch (e) {
       setError(e.response?.data?.error || 'Incorrect code');
@@ -57,8 +60,9 @@ export default function AdminSecuritySettings() {
     setError('');
     setBusy(true);
     try {
-      await api.post('/auth/mfa/disable', { password });
+      await api.post('/auth/mfa/disable', { password, code: mfaCode });
       setPassword('');
+      setMfaCode('');
       setMessage('MFA disabled.');
       setBackupCodes(null);
       await refreshUser();
@@ -74,9 +78,10 @@ export default function AdminSecuritySettings() {
     setError('');
     setBusy(true);
     try {
-      const res = await api.post('/auth/mfa/backup-codes/regenerate', { password });
+      const res = await api.post('/auth/mfa/backup-codes/regenerate', { password, code: mfaCode });
       setBackupCodes(res.data.backupCodes);
       setPassword('');
+      setMfaCode('');
     } catch (e) {
       setError(e.response?.data?.error || 'Failed to regenerate backup codes');
     } finally {
@@ -112,12 +117,16 @@ export default function AdminSecuritySettings() {
             <form onSubmit={regenerateBackupCodes} className="mt">
               <label>Password (to regenerate backup codes)</label>
               <input required type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+              <label>Authenticator code</label>
+              <input required inputMode="numeric" autoComplete="one-time-code" value={mfaCode} onChange={(e) => setMfaCode(e.target.value)} placeholder="123456" />
               <button className="btn mt" type="submit" disabled={busy}>Regenerate backup codes</button>
             </form>
 
             <form onSubmit={disableMfa} className="mt">
               <label>Password (to disable MFA)</label>
               <input required type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+              <label>Authenticator or backup code</label>
+              <input required autoComplete="one-time-code" value={mfaCode} onChange={(e) => setMfaCode(e.target.value)} placeholder="123456" />
               <button className="btn btn-danger mt" type="submit" disabled={busy}>Disable MFA</button>
             </form>
           </section>
@@ -145,6 +154,8 @@ export default function AdminSecuritySettings() {
                 onChange={(e) => setConfirmCode(e.target.value)}
                 placeholder="123456"
               />
+              <label>Your account password</label>
+              <input required type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
               <button className="btn btn-primary mt" type="submit" disabled={busy}>Confirm and enable</button>
             </form>
           </section>
