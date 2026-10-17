@@ -32,6 +32,8 @@ const inspectionRoutes = require('./routes/inspections');
 const inspectionQuotesRoutes = require('./routes/inspectionQuotes');
 const inspectionCoordinationRoutes = require('./routes/inspectionCoordination');
 const inspectionEvidenceRoutes = require('./routes/InspectionEvidence');
+const inspectionArrivalRoutes = require('./routes/inspectionArrival');
+const adminInspectionArrivalsRoutes = require('./routes/adminInspectionArrivals');
 
 const transportRoutes = require('./routes/transport');
 const transportQuotesRoutes = require('./routes/transportQuotes');
@@ -367,6 +369,10 @@ app.use('/api/inspections', inspectionRoutes);
 app.use('/api/inspections', inspectionQuotesRoutes);
 app.use('/api/inspections', inspectionCoordinationRoutes);
 app.use('/api/inspections', inspectionEvidenceRoutes);
+// Arrival proof (GPS + photo + handshake code), report acceptance, reliability.
+app.use('/api/inspections', inspectionArrivalRoutes);
+// Admin queue for disputed arrivals; mounted before /api/admin so it is matched first.
+app.use('/api/admin/inspection-arrivals', adminInspectionArrivalsRoutes);
 
 app.use('/api/transport', transportRoutes);
 // Transport sub-routers (quotes/negotiation, pickup coordination, evidence).
