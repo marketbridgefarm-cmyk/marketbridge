@@ -2,6 +2,8 @@ import React from 'react';
 
 import AmountPicker from '../../components/AmountPicker.jsx';
 import EvidenceGallery from '../../components/EvidenceGallery.jsx';
+import InspectionArrivalPanel, { ReliabilityBadge } from '../../components/InspectionArrivalPanel.jsx';
+import AcceptReportButton from '../../components/AcceptReportButton.jsx';
 import OrderDecisionPanel from '../../components/OrderDecisionPanel.jsx';
 import { InspectionRequestSummary } from '../../components/RequestScopeSummary.jsx';
 import ReleaseAgreementControl from './OrderDetailReleaseControl.jsx';
@@ -160,13 +162,13 @@ export default function InspectionCard({ order, title, i }) {
         <Section
           title={
             request.status === 'ACCEPTED' && !request.sellerConfirmedAt
-              ? 'Next step: confirm the inspector on-site'
+              ? 'Next step: accept the inspector and fee'
               : 'Inspection coordination'
           }
         >
           <p className="muted small">
             {request.status === 'ACCEPTED' && !request.sellerConfirmedAt
-              ? 'Open the coordination handoff below. Once you and the inspector have both shared your site and arrival details, use "Confirm inspector is on-site and ready" inside that panel to unlock the buyer\'s fee payment.'
+              ? 'Open the coordination handoff below. Once you and the inspector have both shared your site and arrival details, use "Accept inspector and fee" inside that panel. The fee is paid after the inspector checks in on site.'
               : 'Share site access and coordination details with the inspector.'}
           </p>
           <Button
@@ -175,9 +177,15 @@ export default function InspectionCard({ order, title, i }) {
             onClick={() => i.onOpenModal('inspection-coordination')}
           >
             {request.status === 'ACCEPTED' && !request.sellerConfirmedAt
-              ? 'Open handoff & confirm inspector'
+              ? 'Open handoff & accept inspector'
               : 'Open inspection coordination'}
           </Button>
+        </Section>
+      )}
+
+      {(i.isSeller || i.isBuyer || isRequester || i.isAdmin) && request.status === 'ACCEPTED' && request.sellerConfirmedAt && (
+        <Section title="Inspector arrival">
+          <InspectionArrivalPanel requestId={request.id} onChanged={i.onReload} />
         </Section>
       )}
 
@@ -232,6 +240,10 @@ export default function InspectionCard({ order, title, i }) {
                         <div className="od-person">
                           <Avatar small name={quote.inspector?.name || 'Inspector'} />
                           <strong>{quote.inspector?.name || 'Inspector'}</strong>
+                          <ReliabilityBadge reliability={quote.reliability || quote.inspector?.reliability} />
+                          {quote.rank === 1 && isPending && quotes.filter((q) => q.status === 'PENDING').length > 1 && (
+                            <span className="badge od-badge-inline" title="Highest reliability, then lowest fee">Best match</span>
+                          )}
                         </div>
                         <p>
                           {quote.inspector?.location || 'Location not set'}
@@ -362,10 +374,10 @@ export default function InspectionCard({ order, title, i }) {
         <Section title={request.sellerConfirmedAt ? 'Inspector confirmed — fee payment' : 'Inspector provisionally selected'}>
           <p className="muted">
             {!request.sellerConfirmedAt
-              ? 'The inspector and fee are provisionally agreed. The seller must confirm them before inspection payment can begin.'
+              ? 'The inspector and fee are provisionally agreed. The seller must accept them before inspection payment can begin.'
               : !request.inspectorOnSiteConfirmedAt
-                ? 'Fee confirmed. Now the seller confirms the inspector has physically arrived on site and is ready to start.'
-                : 'Fee confirmed and inspector on site. The designated payer(s) may now pay the inspection fee.'}
+                ? 'Inspector and fee accepted. Next, the inspector checks in on site (location + photo); the fee is paid once the arrival is confirmed.'
+                : 'Inspector arrival confirmed. The designated payer(s) may now pay the inspection fee.'}
           </p>
           <p>
             Fee: <strong>{money(request.fee)} ETB</strong>
@@ -379,12 +391,12 @@ export default function InspectionCard({ order, title, i }) {
             </p>
           ) : !request.sellerConfirmedAt ? (
             <p className="muted small">
-              Waiting for the seller to confirm the selected inspector and agreed fee.
+              Waiting for the seller to accept the selected inspector and agreed fee.
               {request.workflowDueAt ? ` Deadline: ${new Date(request.workflowDueAt).toLocaleString()}.` : ''}
             </p>
           ) : !request.inspectorOnSiteConfirmedAt ? (
             <p className="muted small">
-              Waiting for the seller to confirm the inspector is on site and ready to start.
+              Waiting for the inspector to check in on site. The fee can be paid once the arrival is confirmed.
             </p>
           ) : (
             <p className="muted small">
@@ -461,6 +473,12 @@ export default function InspectionCard({ order, title, i }) {
               mediaUrl={(evidenceId) => `/inspections/${request.id}/evidence/${evidenceId}/media`}
             />
           </Section>
+
+          {(i.isBuyer || isRequester) && !i.isSeller && (
+            <Section title="Accept the report">
+              <AcceptReportButton requestId={request.id} accepted={Boolean(request.reportAcceptedAt)} onChanged={i.onReload} />
+            </Section>
+          )}
 
           {addenda.length > 0 && (
             <Section title="Report addenda" meta={`${addenda.length}`}>
