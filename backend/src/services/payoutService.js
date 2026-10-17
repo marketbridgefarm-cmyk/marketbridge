@@ -117,15 +117,36 @@ function payoutRolesForDispute(disputeType) {
   return null;
 }
 
+/**
+ * An inspector who has submitted the report has done their job. A dispute about
+ * the order (goods, transport, or an unclassified one) must not freeze that fee.
+ * The one exception is a dispute explicitly about the inspection report itself
+ * (type mentions INSPECT): freezing is then the point, so a fabricated report
+ * cannot be paid out while it is contested. Set
+ * INSPECTOR_FEE_FREEZE_ON_REPORT_DISPUTE=false to never freeze it.
+ */
+function inspectorFeeIsEarned(payout) {
+  return payout.payeeRole === 'INSPECTOR' && payout.payment?.inspectionRequest?.status === 'COMPLETED';
+}
+
+function freezeInspectorFeeOnReportDispute() {
+  return String(process.env.INSPECTOR_FEE_FREEZE_ON_REPORT_DISPUTE || 'true').toLowerCase() !== 'false';
+}
+
 async function holdForDispute(tx, { orderId, actorId, disputeType }) {
   const roles = payoutRolesForDispute(disputeType);
-  const payouts = await tx.payout.findMany({
+  const allPayouts = await tx.payout.findMany({
     where: {
       orderId,
       status: { in: ['HELD', 'RELEASED'] },
       ...(roles ? { payeeRole: { in: roles } } : {}),
     },
+    include: { payment: { select: { inspectionRequestId: true, inspectionRequest: { select: { status: true } } } } },
   });
+
+  const aboutTheReport = String(disputeType || '').toUpperCase().includes('INSPECT');
+  const exemptEarnedFee = !(aboutTheReport && freezeInspectorFeeOnReportDispute());
+  const payouts = allPayouts.filter((payout) => !(exemptEarnedFee && inspectorFeeIsEarned(payout)));
 
   const updated = [];
   for (const payout of payouts) {
@@ -230,15 +251,22 @@ async function cancelAfterDispute(tx, { orderId, actorId }) {
  * HELD payout to RELEASED and ops could pay the seller for an order the
  * buyer was refunded for.
  *
- * PAID_OUT payouts are left alone (the money already left the platform;
+ * Inspector payouts for an inspection whose report was submitted
+ * (retainInspectionRequestIds) are also left alone, so they still release after
+ * the review window. PAID_OUT payouts are left alone (the money already left the platform;
  * recovering it is an operational matter this record can't gate), and so
  * are payouts that are already CANCELLED. Returns the payouts it cancelled.
  */
-async function cancelPayoutsForOrder(tx, { orderId, actorId, reason }) {
+async function cancelPayoutsForOrder(tx, { orderId, actorId, reason, retainInspectionRequestIds = [] }) {
+  // An inspector whose report was already submitted keeps their payout when the
+  // order is cancelled: the work was done and the buyer received the report.
   const payouts = await tx.payout.findMany({
     where: {
       orderId,
       status: { in: ['HELD', 'RELEASED', 'ON_HOLD_DISPUTE'] },
+      ...(retainInspectionRequestIds.length
+        ? { NOT: { payeeRole: 'INSPECTOR', payment: { inspectionRequestId: { in: retainInspectionRequestIds } } } }
+        : {}),
     },
   });
 

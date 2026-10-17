@@ -202,8 +202,21 @@ async function cancelOrderInTransaction(tx, { order, actorId = null, reason = nu
     }
   }
 
+  // An inspection whose report was already submitted is finished work: keep it
+  // COMPLETED (the report stays readable), keep the inspector's payout and do not
+  // refund the inspection fee. Cancelling the order must not claw it back.
+  const earnedInspections = await tx.inspectionRequest.findMany({
+    where: { orderId: order.id, status: 'COMPLETED' },
+    select: { id: true },
+  });
+  const earnedInspectionIds = earnedInspections.map((r) => r.id);
+
   await tx.inspectionRequest.updateMany({
-    where: { orderId: order.id, status: { not: 'CANCELLED' } },
+    where: {
+      orderId: order.id,
+      status: { not: 'CANCELLED' },
+      ...(earnedInspectionIds.length ? { id: { notIn: earnedInspectionIds } } : {}),
+    },
     data: { status: 'CANCELLED' },
   });
 
@@ -223,6 +236,7 @@ async function cancelOrderInTransaction(tx, { order, actorId = null, reason = nu
     orderId: order.id,
     actorId,
     reason: reason || 'Order cancellation',
+    retainInspectionRequestIds: earnedInspectionIds,
   });
 
   // Create durable refund requests for paid funds. A refund is only marked
@@ -240,8 +254,11 @@ async function cancelOrderInTransaction(tx, { order, actorId = null, reason = nu
   // installment is refunded on its own, and the parent is marked REFUNDED once
   // the last of them completes (see refund completion). Unpaid installments
   // and an unsettled parent are closed so they can no longer be paid.
+  const isEarnedInspectionFee = (p) =>
+    p.type === 'INSPECTOR' && p.inspectionRequestId && earnedInspectionIds.includes(p.inspectionRequestId);
+  const retainedInspectionPayments = allPaidOrderPayments.filter(isEarnedInspectionFee);
   const planParents = allPaidOrderPayments.filter(isInstallmentParent);
-  const paidOrderPayments = allPaidOrderPayments.filter((p) => !isInstallmentParent(p));
+  const paidOrderPayments = allPaidOrderPayments.filter((p) => !isInstallmentParent(p) && !isEarnedInspectionFee(p));
 
   for (const parent of planParents) {
     await tx.payment.updateMany({
@@ -308,6 +325,8 @@ async function cancelOrderInTransaction(tx, { order, actorId = null, reason = nu
       reason,
       refundedPaymentIds: toRefund.map((p) => p.id),
       cancelledPayoutIds: cancelledPayouts.map((p) => p.id),
+      retainedInspectionRequestIds: earnedInspectionIds,
+      retainedInspectionPaymentIds: retainedInspectionPayments.map((p) => p.id),
     },
   });
 
