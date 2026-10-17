@@ -907,7 +907,7 @@ export default function OrderDetail() {
       setError('Review the completed inspection report before choosing BUY.');
       return false;
     }
-    if (decision === 'CANCEL' && !window.confirm('Cancel this purchase after reviewing the inspection report? This cannot be undone.')) return false;
+    if (decision === 'CANCEL' && !window.confirm('Cancel this purchase after reviewing the inspection report? This cannot be undone. The inspection fee is not refunded: the inspector has already delivered the report.')) return false;
     const ok = await run(
       `buyer-decision-${decision.toLowerCase()}`,
       () => api.patch(`/orders/${order.id}/buyer-decision`, { decision }),
@@ -1085,7 +1085,7 @@ export default function OrderDetail() {
 
   const cancelOrder = () => {
     if (!canCancelOrder) return;
-    if (!window.confirm('Cancel this order? This cannot be undone. The listing becomes available again and completed payments are flagged for refund.')) return;
+    if (!window.confirm('Cancel this order? This cannot be undone. The listing becomes available again and completed payments are flagged for refund, except an inspection fee whose report was already delivered (the inspector keeps it).')) return;
     const reason = window.prompt('Optional: add a reason for cancelling (shown in the order history).') || undefined;
     return run('cancel', () => api.patch(`/orders/${order.id}/cancel`, reason ? { reason } : {}), 'Could not cancel order');
   };
@@ -1166,7 +1166,7 @@ export default function OrderDetail() {
     } catch (err) {
       const message = getError(err, 'Could not raise dispute');
       if (/cannot be disputed/i.test(message) || /already has an open dispute/i.test(message)) {
-        setError(`${message} If the order was cancelled, any payments already made (including an inspection fee) are refunded automatically — check the Payment Center for its status instead of disputing.`);
+        setError(`${message} If the order was cancelled, any payments already made are refunded automatically (an inspection fee is kept once the inspector has delivered the report) — check the Payment Center for its status instead of disputing.`);
         await reload();
       } else {
         setError(message);
