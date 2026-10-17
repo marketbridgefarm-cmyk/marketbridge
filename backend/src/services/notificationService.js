@@ -100,7 +100,43 @@ const EVENT_COPY = {
   INSPECTION_INSPECTOR_ARRIVED: {
     type: 'INSPECTION',
     title: 'Inspector confirmed on site',
-    body: 'The seller confirmed the inspector has arrived on site. The inspection fee can now be paid.',
+    body: 'The inspector\'s arrival on site is confirmed. The inspection fee can now be paid.',
+    action: 'order',
+  },
+  INSPECTION_ARRIVAL_CHECKED_IN: {
+    type: 'INSPECTION',
+    title: 'The inspector says they have arrived',
+    body: 'Please confirm the inspector is at your site, or report a problem. If you do not answer in time, the arrival is confirmed automatically.',
+    action: 'order',
+  },
+  INSPECTION_ARRIVAL_DISPUTED: {
+    type: 'INSPECTION',
+    title: 'Inspector arrival disputed',
+    body: 'The seller says the inspector was not on site. MarketBridge is reviewing the inspector\'s GPS location and photo.',
+    action: 'order',
+  },
+  INSPECTION_ARRIVAL_RESOLVED: {
+    type: 'INSPECTION',
+    title: 'Arrival dispute decided',
+    body: 'MarketBridge reviewed the inspector arrival dispute. Open the order to see the outcome.',
+    action: 'order',
+  },
+  INSPECTION_NO_SHOW: {
+    type: 'INSPECTION',
+    title: 'Inspector did not arrive',
+    body: 'The inspector did not arrive, so the inspection is open for new bids. The purchase is unchanged and nothing was charged for the inspection.',
+    action: 'order',
+  },
+  INSPECTION_REPORT_ACCEPTED: {
+    type: 'INSPECTION',
+    title: 'Inspection report accepted',
+    body: 'The buyer accepted the inspection report. The inspector\'s fee has been released from escrow.',
+    action: 'order',
+  },
+  INSPECTION_DEADLINE_REMINDER: {
+    type: 'INSPECTION',
+    title: 'Inspection deadline approaching',
+    body: 'An inspection step is due soon. Open the order to complete it before the deadline.',
     action: 'order',
   },
   INSPECTION_PAYMENT_COMPLETE: {
@@ -418,6 +454,30 @@ function buildCopy(type, metadata = {}) {
     }
   }
 
+  if (type === 'INSPECTION_INSPECTOR_ARRIVED') {
+    if (metadata.via === 'AUTO') body = 'The seller did not answer in time, so the inspector\'s arrival was confirmed automatically. The inspection fee can now be paid.';
+    else if (metadata.via === 'CODE') body = 'The inspector arrived and entered the seller\'s handshake code. The inspection fee can now be paid.';
+    else if (metadata.via === 'ADMIN') body = 'MarketBridge confirmed the inspector\'s arrival after reviewing a dispute. The inspection fee can now be paid.';
+  }
+
+  if (type === 'INSPECTION_ARRIVAL_RESOLVED') {
+    body = metadata.outcome === 'ARRIVED'
+      ? 'MarketBridge ruled the inspector was on site. The inspection fee can now be paid.'
+      : 'MarketBridge ruled the inspector did not show up. The inspection is open for new bids and your purchase is unchanged.';
+  }
+
+  if (type === 'INSPECTION_DEADLINE_REMINDER') {
+    const hours = metadata.hoursLeft;
+    title = hours ? `Inspection deadline in about ${hours} hours` : title;
+    if (metadata.phase === 'SELLER_CONFIRMATION') {
+      body = 'Accept the selected inspector and fee before the deadline, or the provisional purchase will close automatically.';
+    } else if (metadata.phase === 'INSPECTOR_ARRIVAL') {
+      body = 'The inspector must check in on site before the deadline. If they do not, the inspection reopens for new bids.';
+    } else if (metadata.phase === 'PAYMENT') {
+      body = 'The inspection fee must be paid before the deadline, or the provisional purchase will close automatically.';
+    }
+  }
+
   if (type === 'TRANSPORT_STATUS_CHANGED' && metadata.toStatus) {
     body = `Transport status is now ${String(metadata.toStatus).replace(/_/g, ' ').toLowerCase()}. Review the order for the next step.`;
   }
@@ -504,10 +564,26 @@ async function resolveRecipients(tx, { orderId, actorId, type, metadata = {} }) 
     case 'INSPECTION_STALLED':
       recipients = [...buyerSeller, ...inspectionUsers];
       break;
+    case 'INSPECTION_ARRIVAL_DISPUTED':
+    case 'INSPECTION_ARRIVAL_RESOLVED':
+    case 'INSPECTION_REPORT_ACCEPTED':
+      recipients = [...buyerSeller, ...inspectionUsers];
+      break;
+    case 'INSPECTION_NO_SHOW':
+      // The request has already been returned to bidding (no inspector), so name the inspector explicitly.
+      recipients = [...buyerSeller, metadata.inspectorId];
+      break;
     case 'INSPECTION_SELLER_CONFIRMATION_WAITING':
     case 'INSPECTION_SELLER_CONFIRMATION_REMINDER':
+    case 'INSPECTION_ARRIVAL_CHECKED_IN':
       // Only the seller acts on this; notifying anyone else is noise.
       recipients = [order.sellerId];
+      break;
+    case 'INSPECTION_DEADLINE_REMINDER':
+      // Tell only the people who can act on the current step.
+      if (metadata.audience === 'SELLER') recipients = [order.sellerId];
+      else if (metadata.audience === 'INSPECTOR_AND_SELLER') recipients = [order.sellerId, metadata.inspectorId];
+      else recipients = buyerSeller;
       break;
 
     // ── Transport ──────────────────────────────────────────────────────────

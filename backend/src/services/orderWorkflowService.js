@@ -682,12 +682,12 @@ function buildActions(order, payments, viewer) {
     if (request.status === 'ACCEPTED' && request.inspectorId && !request.sellerConfirmedAt) {
       push({
         code: 'CONFIRM_INSPECTION',
-        label: 'Confirm inspector and fee',
+        label: 'Accept inspector and fee',
         actorRole: 'SELLER',
         inspectionRequestId: request.id,
         viewerCanPerform: isSeller,
         ready: isSeller,
-        reason: isSeller ? null : 'Waiting for the seller to confirm the selected inspector and agreed fee',
+        reason: isSeller ? null : 'Waiting for the seller to accept the selected inspector and agreed fee',
         route: { method: 'POST', path: `/inspections/${request.id}/seller-confirm` },
       });
       push({
@@ -703,16 +703,54 @@ function buildActions(order, payments, viewer) {
     }
 
     if (request.status === 'ACCEPTED' && request.sellerConfirmedAt && !request.inspectorOnSiteConfirmedAt) {
-      push({
-        code: 'CONFIRM_INSPECTOR_ARRIVAL',
-        label: 'Confirm inspector on site',
-        actorRole: 'SELLER',
-        inspectionRequestId: request.id,
-        viewerCanPerform: isSeller,
-        ready: isSeller,
-        reason: isSeller ? null : 'Waiting for the seller to confirm the inspector has arrived on site',
-        route: { method: 'POST', path: `/inspections/${request.id}/inspector-arrived` },
-      });
+      // Arrival is proven by the inspector's check-in (GPS + photo, optional handshake code).
+      const arrival = request.arrival && request.arrival.inspectorId === request.inspectorId ? request.arrival : null;
+
+      if (arrival && arrival.status === 'PENDING_SELLER') {
+        push({
+          code: 'CONFIRM_INSPECTOR_ARRIVAL',
+          label: "Yes, the inspector is here",
+          actorRole: 'SELLER',
+          inspectionRequestId: request.id,
+          viewerCanPerform: isSeller,
+          ready: isSeller,
+          reason: isSeller ? null : 'Waiting for the seller to confirm the inspector is on site',
+          route: { method: 'POST', path: `/inspections/${request.id}/arrival/confirm` },
+          deadline: arrival.disputeWindowEndsAt || null,
+        });
+        push({
+          code: 'DISPUTE_INSPECTOR_ARRIVAL',
+          label: 'No, the inspector is not here',
+          actorRole: 'SELLER',
+          inspectionRequestId: request.id,
+          viewerCanPerform: isSeller,
+          ready: isSeller,
+          reason: isSeller ? null : 'Only the seller can dispute the arrival',
+          route: { method: 'POST', path: `/inspections/${request.id}/arrival/dispute` },
+        });
+      } else if (arrival && arrival.status === 'DISPUTED') {
+        push({
+          code: 'ARRIVAL_UNDER_REVIEW',
+          label: 'Arrival under review',
+          actorRole: 'ADMIN',
+          inspectionRequestId: request.id,
+          viewerCanPerform: false,
+          ready: false,
+          reason: 'MarketBridge is reviewing the inspector\'s GPS location and photo',
+        });
+      } else if (assignedToViewer) {
+        push({
+          code: 'INSPECTOR_CHECK_IN',
+          label: 'Check in on site',
+          actorRole: 'INSPECTOR',
+          inspectionRequestId: request.id,
+          viewerCanPerform: isInspector,
+          ready: isInspector,
+          reason: isInspector ? null : 'Waiting for the inspector to check in on site',
+          route: { method: 'POST', path: `/inspections/${request.id}/arrival/check-in` },
+          deadline: request.workflowDueAt || null,
+        });
+      }
     }
 
     // Inspector work
@@ -726,9 +764,9 @@ function buildActions(order, payments, viewer) {
         viewerCanPerform: isInspector,
         ready: canStart,
         reason: !request.sellerConfirmedAt
-          ? 'Seller must confirm the selected inspector and fee first'
+          ? 'Seller must accept the selected inspector and fee first'
           : !request.inspectorOnSiteConfirmedAt
-            ? 'Seller must confirm inspector arrival on site first'
+            ? 'The inspector must check in on site and the arrival must be confirmed first'
             : null,
         route: { method: 'POST', path: `/inspections/${request.id}/start` },
       });

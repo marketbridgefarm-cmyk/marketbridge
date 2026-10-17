@@ -22,6 +22,10 @@
 //                        governs the hold for all three roles) gives the
 //                        paying party time to raise a dispute before money
 //                        is confirmed releasable.
+//                        Inspector fees are the exception: they stay in escrow
+//                        until the report is submitted, then release the moment
+//                        the buyer accepts the report, or automatically after
+//                        INSPECTION_REPORT_REVIEW_HOURS (default 48h).
 //   ON_HOLD_DISPUTE  -> a dispute was raised on the order while one or more
 //                        of its payouts were still HELD or RELEASED (not
 //                        yet paid out). Since a dispute is raised against
@@ -51,6 +55,7 @@
 // ============================================================================
 
 const { recordAuditEvent } = require('../utils/audit');
+const arrivalLogic = require('./inspectionArrivalLogic');
 
 const DEFAULT_HOLD_DAYS = 3;
 
@@ -298,14 +303,29 @@ async function releaseDuePayouts(prisma, now = new Date()) {
 
   for (const payout of payouts) {
     let completionAt = null;
+    let holdMs = holdDays() * 24 * 60 * 60 * 1000;
+    let inspectorReviewRule = false;
 
     if (payout.payeeRole === 'SELLER' || payout.payeeRole === 'TRANSPORTER') {
       const receiptEvent = payout.order?.events?.[0];
       if (receiptEvent) completionAt = receiptEvent.createdAt;
       else if (payout.order?.status === 'COMPLETED') completionAt = payout.order.updatedAt;
     } else if (payout.payeeRole === 'INSPECTOR') {
+      // Inspector fee stays in escrow until the report is submitted. It is then
+      // released the moment the buyer accepts the report, or automatically when
+      // the (shorter) report review window passes. The generic payment-time
+      // hold does not apply to inspectors.
       const request = payout.payment?.inspectionRequest;
-      if (request?.status === 'COMPLETED') completionAt = request.updatedAt;
+      if (request?.status === 'COMPLETED') {
+        inspectorReviewRule = true;
+        if (request.reportAcceptedAt) {
+          completionAt = request.reportAcceptedAt;
+          holdMs = 0;
+        } else {
+          completionAt = request.completedAt || request.updatedAt;
+          holdMs = arrivalLogic.config.reportReviewHours() * 60 * 60 * 1000;
+        }
+      }
     }
 
     if (!completionAt) {
@@ -313,16 +333,14 @@ async function releaseDuePayouts(prisma, now = new Date()) {
       continue;
     }
 
-    const eligibleReleaseAt = new Date(
-      new Date(completionAt).getTime() + holdDays() * 24 * 60 * 60 * 1000
-    );
+    const eligibleReleaseAt = new Date(new Date(completionAt).getTime() + holdMs);
 
     // Move an old payment-time releaseAt forward to completion + hold. This
     // prevents a payout from becoming RELEASED immediately when a late order
     // finally completes.
-    const effectiveReleaseAt = new Date(
-      Math.max(new Date(payout.releaseAt).getTime(), eligibleReleaseAt.getTime())
-    );
+    const effectiveReleaseAt = inspectorReviewRule
+      ? eligibleReleaseAt
+      : new Date(Math.max(new Date(payout.releaseAt).getTime(), eligibleReleaseAt.getTime()));
 
     if (effectiveReleaseAt > now) {
       if (effectiveReleaseAt.getTime() !== new Date(payout.releaseAt).getTime()) {
@@ -341,14 +359,28 @@ async function releaseDuePayouts(prisma, now = new Date()) {
       where: {
         id: payout.id,
         status: 'HELD',
-        releaseAt: { lte: now },
+        ...(inspectorReviewRule ? {} : { releaseAt: { lte: now } }),
       },
-      data: { status: 'RELEASED', releasedAt: now },
+      data: { status: 'RELEASED', releasedAt: now, ...(inspectorReviewRule ? { releaseAt: effectiveReleaseAt } : {}) },
     });
     released += claim.count;
   }
 
   return { released, deferred };
+}
+
+/**
+ * Buyer accepted the inspection report: release the inspector's held fee now
+ * instead of waiting for the review window. Only HELD payouts move; anything
+ * frozen by a dispute (ON_HOLD_DISPUTE) or already released is left alone.
+ * Must run inside the transaction that records the acceptance.
+ */
+async function releaseInspectorPayoutsForRequest(tx, { inspectionRequestId, now = new Date() }) {
+  const result = await tx.payout.updateMany({
+    where: { status: 'HELD', payeeRole: 'INSPECTOR', payment: { inspectionRequestId } },
+    data: { status: 'RELEASED', releasedAt: now, releaseAt: now },
+  });
+  return { released: result.count };
 }
 
 /**
@@ -403,5 +435,6 @@ module.exports = {
   cancelAfterDispute,
   cancelPayoutsForOrder,
   releaseDuePayouts,
+  releaseInspectorPayoutsForRequest,
   markPaidOut,
 };

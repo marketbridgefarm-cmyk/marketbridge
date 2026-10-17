@@ -171,6 +171,10 @@ async function expireInspectionWorkflows(now = new Date()) {
 
         // Provisional agreement lapsed: seller never confirmed, or the fee was not fully paid in time.
         if (request.status === 'ACCEPTED' && !request.startDueAt && request.workflowDueAt && request.workflowDueAt <= now) {
+          // Seller accepted the inspector and fee but the inspector has not been confirmed on site:
+          // this is the ARRIVAL window, handled (no-show, bidding reopened, order kept) by
+          // lapseMissedArrivals in inspectionArrivalService, not an unpaid-fee lapse.
+          if (request.sellerConfirmedAt && !request.inspectorOnSiteConfirmedAt) return false;
           const inFlight = await tx.payment.count({ where: { inspectionRequestId: request.id, type: 'INSPECTOR', status: 'PROCESSING' } });
           if (inFlight) return false; // a payer is mid-checkout; retry next cycle
           const code = request.sellerConfirmedAt ? 'INSPECTION_PAYMENT_EXPIRED' : 'SELLER_CONFIRMATION_EXPIRED';
@@ -375,39 +379,8 @@ async function createDeadlineReminders(now = new Date()) {
     created += 1;
   };
 
-  const inspections = await prisma.inspectionRequest.findMany({
-    where: {
-      status: 'ACCEPTED',
-      sellerConfirmedAt: null,
-      workflowDueAt: { gt: windowStart, lte: windowEnd },
-    },
-    select: { id: true, orderId: true, inspectorId: true, workflowDueAt: true },
-    take: 500,
-  });
-  for (const item of inspections) {
-    if (!item.orderId) continue;
-    const exists = await prisma.orderEvent.findFirst({
-      where: { orderId: item.orderId, type: 'INSPECTION_SELLER_CONFIRMATION_WAITING', metadata: { path: ['deadline'], equals: item.workflowDueAt.toISOString() } },
-      select: { id: true },
-    });
-    if (!exists) {
-      await prisma.$transaction(async (tx) => {
-        await recordOrderEvent(tx, {
-          orderId: item.orderId,
-          actorId: null,
-          type: 'INSPECTION_SELLER_CONFIRMATION_WAITING',
-          metadata: { inspectionRequestId: item.id, inspectorId: item.inspectorId, deadline: item.workflowDueAt.toISOString() },
-        });
-        await recordOrderEvent(tx, {
-          orderId: item.orderId,
-          actorId: null,
-          type: 'INSPECTION_SELLER_CONFIRMATION_REMINDER',
-          metadata: { inspectionRequestId: item.id, inspectorId: item.inspectorId, deadline: item.workflowDueAt.toISOString() },
-        });
-      }, { maxWait: 10000, timeout: 15000 });
-      created += 2;
-    }
-  }
+  // Inspection deadlines (seller acceptance, arrival, fee payment) are reminded at 12h and 2h
+  // by sendDeadlineReminders in inspectionArrivalService; see runMaintenanceCycle.
 
   const jobs = await prisma.transportJob.findMany({
     where: {
@@ -761,6 +734,14 @@ async function syncProcessingRefunds() {
   return { checked: pending.length, completed, failed, stillPending };
 }
 
+async function sweepInspectionArrivals(now = new Date()) {
+  const arrivals = require('./inspectionArrivalService');
+  const autoConfirmed = await arrivals.autoConfirmDueArrivals(prisma, now);
+  const missed = await arrivals.lapseMissedArrivals(prisma, now);
+  const reminders = await arrivals.sendDeadlineReminders(prisma, now);
+  return { ...autoConfirmed, ...missed, ...reminders };
+}
+
 async function sweepStandings(now = new Date()) {
   const { sweepProviderStandings } = require('./providerStandingService');
   return sweepProviderStandings(prisma, now);
@@ -770,10 +751,10 @@ async function runMaintenanceCycle() {
   return withJobLock(async () => {
     const startedAt = Date.now();
     const now = new Date();
-    const [offers, listings, ads, adsActivated, reminders, backfilledStep5Deadlines, deadlineReminders, step5Deadlines, unpaidOrders, inspectionWorkflows, transportWorkflows, sms, payouts, requestedRefunds, refundSync, providerStandings] = await Promise.all([
-      expireOffers(now), expireListings(now), expireAdvertisements(now), activateScheduledAdvertisements(now), createPickupReminders(now), backfillStep5Deadlines(now), createDeadlineReminders(now), expireStep5Deadlines(now), expireUnpaidOrders(now), expireInspectionWorkflows(now), expireTransportWorkflows(now), sendPendingSms(now), releaseDuePayouts(prisma, now), submitRequestedRefunds(), syncProcessingRefunds(), sweepStandings(now),
+    const [offers, listings, ads, adsActivated, reminders, backfilledStep5Deadlines, deadlineReminders, step5Deadlines, unpaidOrders, inspectionWorkflows, transportWorkflows, sms, payouts, requestedRefunds, refundSync, providerStandings, inspectionArrivals] = await Promise.all([
+      expireOffers(now), expireListings(now), expireAdvertisements(now), activateScheduledAdvertisements(now), createPickupReminders(now), backfillStep5Deadlines(now), createDeadlineReminders(now), expireStep5Deadlines(now), expireUnpaidOrders(now), expireInspectionWorkflows(now), expireTransportWorkflows(now), sendPendingSms(now), releaseDuePayouts(prisma, now), submitRequestedRefunds(), syncProcessingRefunds(), sweepStandings(now), sweepInspectionArrivals(now),
     ]);
-    return { durationMs: Date.now() - startedAt, offers, listings, ads, adsActivated, reminders, backfilledStep5Deadlines, deadlineReminders, step5Deadlines, unpaidOrders, inspectionWorkflows, transportWorkflows, sms, payouts, requestedRefunds, refundSync, providerStandings };
+    return { durationMs: Date.now() - startedAt, offers, listings, ads, adsActivated, reminders, backfilledStep5Deadlines, deadlineReminders, step5Deadlines, unpaidOrders, inspectionWorkflows, transportWorkflows, sms, payouts, requestedRefunds, refundSync, providerStandings, inspectionArrivals };
   });
 }
 
@@ -792,4 +773,4 @@ function startMaintenanceScheduler() {
   return setInterval(tick, intervalMs);
 }
 
-module.exports = { runMaintenanceCycle, startMaintenanceScheduler, expireOffers, expireListings, expireAdvertisements, activateScheduledAdvertisements, createPickupReminders, backfillStep5Deadlines, createDeadlineReminders, expireStep5Deadlines, expireInspectionWorkflows, expireTransportWorkflows, expireUnpaidOrders, sendPendingSms, releaseDuePayouts, submitRequestedRefunds, syncProcessingRefunds };
+module.exports = { runMaintenanceCycle, startMaintenanceScheduler, expireOffers, expireListings, expireAdvertisements, activateScheduledAdvertisements, createPickupReminders, backfillStep5Deadlines, createDeadlineReminders, expireStep5Deadlines, expireInspectionWorkflows, expireTransportWorkflows, expireUnpaidOrders, sendPendingSms, releaseDuePayouts, submitRequestedRefunds, syncProcessingRefunds, sweepInspectionArrivals };

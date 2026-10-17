@@ -81,6 +81,21 @@ const REPORT_INCLUDE = {
   },
 };
 
+// Arrival state for workflow decisions and cards. Deliberately excludes photo keys,
+// GPS coordinates and the handshake code (those come from GET /inspections/:id/arrival).
+const ARRIVAL_SELECT = {
+  select: {
+    id: true,
+    inspectorId: true,
+    status: true,
+    checkedInAt: true,
+    disputeWindowEndsAt: true,
+    codeVerified: true,
+    late: true,
+    flagged: true,
+  },
+};
+
 const orderDetailInclude = {
   listing: {
     include: {
@@ -88,6 +103,7 @@ const orderDetailInclude = {
         where: { status: { not: 'CANCELLED' } },
         include: {
           report: REPORT_INCLUDE,
+          arrival: ARRIVAL_SELECT,
           inspector: { select: { id: true, name: true, phone: true } },
           payments: { select: { id: true, type: true, status: true, amount: true, method: true, reference: true } },
           quotes: {
@@ -109,6 +125,7 @@ const orderDetailInclude = {
     orderBy: { createdAt: 'desc' },
     include: {
       report: REPORT_INCLUDE,
+      arrival: ARRIVAL_SELECT,
       inspector: { select: { id: true, name: true, phone: true } },
       payments: { select: { id: true, type: true, status: true, amount: true, method: true, reference: true } },
       quotes: {
