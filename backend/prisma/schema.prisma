@@ -502,6 +502,9 @@ model User {
   referralCode         ReferralCode?
   referralClaims       ReferralClaim[]
 
+  inspectionArrivals  InspectionArrival[] @relation("InspectionArrivalInspector")
+  inspectorReliability InspectorReliability?
+
   @@index([email])
   @@index([accountStatus])
   @@index([verificationStatus])
@@ -891,6 +894,19 @@ model InspectionRequest {
   // ── Seller <-> inspector operational coordination ──
   coordination InspectionCoordination?
   availability InspectionAvailability[]
+
+  // ── Arrival proof, handshake code and report acceptance ─────────────────
+  // Random salt behind the seller's 4-digit handshake code (rotated each time
+  // the seller accepts an inspector + fee). The code itself is never stored.
+  arrivalCodeSalt           String?
+  arrivalCodeFailedAttempts Int     @default(0)
+
+  // Buyer/requester accepts the inspection report -> inspector fee is released
+  // without waiting for the review window.
+  reportAcceptedAt   DateTime?
+  reportAcceptedById String?
+
+  arrival InspectionArrival?
 
   @@index([orderId])
   @@index([listingId])
@@ -2634,4 +2650,77 @@ model ReferralClaim {
 
   @@unique([referralCodeId, userId])
   @@index([userId, createdAt])
+}
+
+// ============================================================================
+// INSPECTION ARRIVAL PROOF + INSPECTOR RELIABILITY
+// Mirrors prisma/migrations/202610160001_inspection_arrival_proof.
+// ============================================================================
+
+enum InspectionArrivalStatus {
+  PENDING_SELLER   // inspector checked in; seller can confirm or dispute until disputeWindowEndsAt
+  CONFIRMED        // seller tapped "Yes, they're here" or the handshake code matched
+  AUTO_CONFIRMED   // seller did not respond within the window
+  DISPUTED         // seller says the inspector was not there; admin decides
+  RESOLVED_ARRIVED // admin ruled the inspector was on site
+  RESOLVED_NO_SHOW // admin ruled the inspector did not show up
+}
+
+model InspectionArrival {
+  id String @id @default(uuid())
+
+  inspectionRequest   InspectionRequest @relation(fields: [inspectionRequestId], references: [id], onDelete: Cascade)
+  inspectionRequestId String            @unique
+
+  // The inspector who checked in. If the request is later reassigned, a row
+  // for a different inspector is ignored and overwritten by the next check-in.
+  inspector   User   @relation("InspectionArrivalInspector", fields: [inspectorId], references: [id])
+  inspectorId String
+
+  status InspectionArrivalStatus @default(PENDING_SELLER)
+
+  // Proof captured at check-in.
+  checkedInAt    DateTime @default(now())
+  latitude       Float
+  longitude      Float
+  accuracyMeters Float?
+  photoKeys      String[]
+  codeVerified   Boolean  @default(false)
+
+  // Derived signals for the seller and admin (never block a check-in).
+  distanceKm Float?
+  flagged    Boolean @default(false) // far from the listing's coordinates
+  late       Boolean @default(false)
+
+  disputeWindowEndsAt DateTime?
+
+  sellerRespondedAt   DateTime?
+  sellerRespondedById String?
+
+  // Closed set: NOT_PRESENT | WRONG_PERSON | WRONG_PLACE
+  disputeReason String?
+  disputedAt    DateTime?
+
+  resolvedAt   DateTime?
+  resolvedById String?
+  adminNote    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, disputeWindowEndsAt])
+  @@index([inspectorId])
+}
+
+model InspectorReliability {
+  inspector   User   @relation(fields: [inspectorId], references: [id], onDelete: Cascade)
+  inspectorId String @id
+
+  noShows            Int @default(0)
+  lateArrivals       Int @default(0)
+  onTimeArrivals     Int @default(0)
+  reportsSubmitted   Int @default(0)
+  totalReportMinutes Int @default(0)
+
+  updatedAt DateTime @updatedAt
 }
