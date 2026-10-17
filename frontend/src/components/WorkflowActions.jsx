@@ -48,9 +48,12 @@ const ACTION_UI = {
   REQUEST_INSPECTION: { kind: 'scroll', target: 'inspection-section', label: 'Request an inspection' },
 
 // ── Seller confirmations ─────────────────────────────────────────────
-  CONFIRM_INSPECTION: { kind: 'execute', label: 'Confirm inspector and fee' },
+  CONFIRM_INSPECTION: { kind: 'execute', label: 'Accept inspector and fee' },
   DECLINE_INSPECTION: { kind: 'confirm-execute', label: 'Decline inspector and fee' },
-  CONFIRM_INSPECTOR_ARRIVAL: { kind: 'execute', label: 'Confirm inspector on site' },
+  CONFIRM_INSPECTOR_ARRIVAL: { kind: 'execute', label: 'Yes, the inspector is here' },
+  DISPUTE_INSPECTOR_ARRIVAL: { kind: 'scroll', target: 'inspection-section', label: 'The inspector is not here' },
+  INSPECTOR_CHECK_IN: { kind: 'scroll', target: 'inspection-section', label: 'Check in on site' },
+  ARRIVAL_UNDER_REVIEW: { kind: 'scroll', target: 'inspection-section', label: 'Arrival under review' },
   CONFIRM_TRANSPORT_PREPARATION: { kind: 'execute', label: 'Confirm transporter preparation' },
   CONFIRM_TRUCK_ARRIVAL: { kind: 'execute', label: 'Confirm truck on site' },
 

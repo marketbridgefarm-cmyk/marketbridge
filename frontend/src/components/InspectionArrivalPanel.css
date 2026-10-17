@@ -1,0 +1,28 @@
+.iap { display: grid; gap: 12px; }
+.iap-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin: 0; }
+.iap-summary > div { background: var(--surface-2, rgba(127, 127, 127, 0.08)); border-radius: 10px; padding: 10px 12px; }
+.iap-summary dt { font-size: 12px; opacity: 0.7; margin: 0 0 2px; }
+.iap-summary dd { margin: 0; font-weight: 600; }
+.iap-badge { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; margin-left: 6px; background: rgba(127, 127, 127, 0.15); }
+.iap-badge--highly_reliable { background: rgba(34, 139, 34, 0.18); color: #1d7a1d; }
+.iap-badge--reliable { background: rgba(30, 120, 200, 0.16); color: #1a62a8; }
+.iap-badge--needs_improvement { background: rgba(200, 60, 40, 0.16); color: #b3321f; }
+.iap-notice { color: #1d7a1d; margin: 0; }
+.iap-error { color: #b3321f; margin: 0; }
+.iap-state { margin: 0; }
+.iap-state--ok { color: #1d7a1d; font-weight: 600; }
+.iap-state--warn { color: #9a5a00; font-weight: 600; }
+.iap-code { display: grid; gap: 4px; text-align: center; padding: 14px; border: 2px dashed currentColor; border-radius: 14px; }
+.iap-code-label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.7; }
+.iap-code-value { font-size: 44px; letter-spacing: 0.35em; padding-left: 0.35em; font-variant-numeric: tabular-nums; }
+.iap-form { display: grid; gap: 10px; }
+.iap-form h4 { margin: 0; }
+.iap-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.iap-file { cursor: pointer; }
+.iap-code-input { width: 6ch; font-size: 22px; letter-spacing: 0.3em; text-align: center; }
+.iap-pending { display: grid; gap: 10px; }
+.iap-chips { display: flex; flex-wrap: wrap; gap: 8px; list-style: none; margin: 0; padding: 0; }
+.iap-chip { font-size: 12px; padding: 3px 10px; border-radius: 999px; background: rgba(127, 127, 127, 0.15); }
+.iap-chip--warn { background: rgba(230, 150, 0, 0.2); color: #9a5a00; font-weight: 600; }
+.iap-photo { max-width: 100%; max-height: 320px; border-radius: 12px; object-fit: contain; }
+.iap-dispute { display: grid; gap: 8px; }

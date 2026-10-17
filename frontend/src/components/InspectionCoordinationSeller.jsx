@@ -16,7 +16,7 @@ import './ProvidersCoordination.css';
 //
 // FIXED: this component now:
 //   • shows a live countdown for the inspector's 3-hour handoff window
-//   • owns the single "Confirm inspector on-site" action (merged from the
+//   • owns the "Accept inspector and fee" action (merged from the
 //     old arrival + fee-lock steps)
 // ============================================================================
 
@@ -289,7 +289,7 @@ export default function InspectionCoordinationSeller({ inspectionRequestId }) {
 
           <p className="ic-countdown-text">
             {inspectorHandoffSubmitted
-              ? 'The inspector has shared their arrival details. You can now confirm them on-site below.'
+              ? 'The inspector has shared their arrival details. You can now accept the inspector and fee below.'
               : countdown.expired
                 ? 'The window has closed without a handoff. The provisional agreement has lapsed and the request returns to bidding.'
                 : 'The inspector has 3 hours from acceptance to share their arrival details. If they do not, the agreement lapses and the request returns to bidding.'}
@@ -459,24 +459,26 @@ export default function InspectionCoordinationSeller({ inspectionRequestId }) {
         )}
       </section>
 
-      {/* ── Single "Confirm inspector on-site" action ───────────────── */}
+      {/* ── "Accept inspector and fee" action (arrival is proven later by the inspector's check-in) ── */}
       <section className="ic-confirm">
         <header>
-          <h3>Confirm inspector on-site</h3>
+          <h3>Accept inspector and fee</h3>
           <p className="ic-sub">
-            Confirm that the inspector has arrived on site and is ready to
-            start. This vouches for the inspection and unlocks the buyer's
-            fee payment. Only available after you and the inspector have both
-            submitted your coordination handoffs.
+            Accept the selected inspector and the agreed fee. This is not the
+            on-site confirmation: when the inspector arrives they check in with
+            their location and a photo, and you will get a 4-digit code to read
+            out to them. The fee is paid only after their arrival is confirmed.
+            Only available after you and the inspector have both submitted
+            your coordination handoffs.
           </p>
         </header>
 
         {sellerConfirmedAt ? (
           <p className="ic-sub">
-            <strong>✓ Confirmed on {fmtDate(sellerConfirmedAt)}.</strong>
+            <strong>✓ Inspector and fee accepted on {fmtDate(sellerConfirmedAt)}.</strong>
             {inspectorOnSiteConfirmedAt
-              ? ' The buyer can now pay the agreed inspection fee.'
-              : ''}
+              ? ' The inspector\'s arrival is confirmed and the agreed fee can now be paid.'
+              : ' Waiting for the inspector to check in on site.'}
           </p>
         ) : status !== 'ACCEPTED' ? (
           <p className="ic-sub">
@@ -499,19 +501,19 @@ export default function InspectionCoordinationSeller({ inspectionRequestId }) {
                 setConfirmNotice('');
                 try {
                   await api.post(`/inspections/${inspectionRequestId}/seller-confirm`);
-                  setConfirmNotice('Inspector confirmed on-site. The buyer can now pay the inspection fee.');
+                  setConfirmNotice('Inspector and fee accepted. The inspector checks in when they arrive; the fee is paid after that.');
                   await load();
                 } catch (err) {
                   setConfirmError(
                     err.response?.data?.error ||
-                    'Could not confirm inspector arrival'
+                    'Could not accept the inspector and fee'
                   );
                 } finally {
                   setConfirming(false);
                 }
               }}
             >
-              {confirming ? 'Confirming…' : 'Confirm inspector is on-site and ready'}
+              {confirming ? 'Accepting…' : 'Accept inspector and fee'}
             </button>
 
             {(!submittedAt || !inspectorHandoffSubmitted) && (

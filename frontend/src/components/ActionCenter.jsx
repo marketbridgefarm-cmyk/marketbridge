@@ -59,6 +59,9 @@ const ACTION_HELP = {
   CONFIRM_RECEIPT: 'Confirm only after you have physically received the goods. This completes the order.',
   CANCEL_ORDER: 'Cancel this order. This cannot be undone.',
   START_INSPECTION: 'Start the accepted inspection.',
+  INSPECTOR_CHECK_IN: 'Check in on site with your location and a photo so your arrival can be confirmed.',
+  CONFIRM_INSPECTOR_ARRIVAL: 'The inspector says they have arrived. Confirm they are there, or report a problem.',
+  DISPUTE_INSPECTOR_ARRIVAL: 'The inspector is not at your site? Say so and MarketBridge will review their location and photo.',
   SUBMIT_INSPECTION_REPORT: 'Complete the inspection and publish the evidence report.',
   RAISE_DISPUTE: 'Something went wrong? Open a dispute and an admin will review the order.',
 };
@@ -66,7 +69,7 @@ const ACTION_HELP = {
 const scrollTarget = (code) => {
   if (code === 'PAY_MARKETPLACE' || code === 'PAY_INSPECTION' || code === 'PAY_TRANSPORT') return 'payment-center';
   if (code === 'ARRANGE_TRANSPORT' || code === 'REVIEW_TRANSPORT_QUOTES' || code === 'CONFIRM_LOADING' || code === 'START_PICKUP' || code === 'MARK_IN_TRANSIT' || code === 'MARK_DELIVERED') return 'transport-section';
-  if (code === 'REQUEST_INSPECTION' || code === 'REVIEW_INSPECTION_QUOTES' || code === 'START_INSPECTION' || code === 'SUBMIT_INSPECTION_REPORT') return 'inspection-section';
+  if (code === 'REQUEST_INSPECTION' || code === 'REVIEW_INSPECTION_QUOTES' || code === 'START_INSPECTION' || code === 'SUBMIT_INSPECTION_REPORT' || code === 'INSPECTOR_CHECK_IN' || code === 'CONFIRM_INSPECTOR_ARRIVAL' || code === 'DISPUTE_INSPECTOR_ARRIVAL' || code === 'ARRIVAL_UNDER_REVIEW') return 'inspection-section';
   if (code === 'CONFIRM_RECEIPT') return 'confirm-receipt';
   if (code === 'RAISE_DISPUTE') return 'raise-dispute';
   return 'next-action';

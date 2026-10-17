@@ -271,7 +271,7 @@ export default function InspectionCoordinationInspector({ inspectionRequestId })
 
           <p className="ic-countdown-text">
             {handoffSubmitted
-              ? 'The seller can now confirm you on-site. If they confirm, the buyer will pay the inspection fee and you can start work.'
+              ? 'The seller can now accept you and the fee. When you arrive on site, check in with your location and a photo; once your arrival is confirmed the buyer pays the inspection fee and you can start work.'
               : countdown.expired
                 ? 'The window has closed without a submission. The provisional agreement has lapsed and the request returned to bidding.'
                 : 'You have 3 hours from acceptance to share your arrival details. If you miss the window, the agreement lapses and the request returns to bidding.'}
