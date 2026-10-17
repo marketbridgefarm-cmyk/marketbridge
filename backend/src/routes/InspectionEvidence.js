@@ -15,6 +15,7 @@ const { evidenceUpload, uploadEvidenceFiles } = require('../utils/evidenceUpload
 const { buildBuyerReportEnvelope } = require('../utils/reportContract');
 const { releaseWaitingInspectors } = require('../services/waitingListService');
 const { computeInspectionCompletionDueAt } = require('../utils/orderTiming');
+const { recordReportSubmitted } = require('../services/inspectionArrivalService');
 
 // ============================================================================
 // INSPECTION EVIDENCE + REPORT
@@ -366,6 +367,13 @@ router.post(
         if (completed.count !== 1) {
           throw new Error('INSPECTION_STATUS_CHANGED');
         }
+
+        // Reliability: report turnaround, from the start of the visit.
+        await recordReportSubmitted(tx, {
+          inspectorId: req.user.id,
+          from: request.startedAt || request.inspectorOnSiteConfirmedAt,
+          to: new Date(),
+        });
 
         const relatedOrders = await tx.order.findMany({
           where: { id: request.orderId },

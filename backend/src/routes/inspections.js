@@ -4,6 +4,7 @@ const prisma = require('../config/db');
 const { authenticate } = require('../middleware/auth');
 const { requireRole, requireMfa } = require('../middleware/roleCheck');
 const { recordAuditEvent } = require('../utils/audit');
+const { newCodeSalt, config: arrivalConfig } = require('../services/inspectionArrivalLogic');
 const { recordOrderEvent } = require('../services/orderEventService');
 const { syncOrderPaymentObligations } = require('../services/paymentObligationService');
 const paymentService = require('../services/paymentService');
@@ -13,7 +14,6 @@ const {
 const { lockOrderAndAssertNotClosed } = require('../services/orderStateMachine');
 const {
   computeSellerConfirmationDueAt,
-  computeInspectionPaymentDueAt,
   lapseInspectionAgreement,
 } = require('../services/inspectionLapseService');
 const {
@@ -598,10 +598,10 @@ router.post('/:id/seller-confirm', authenticate, requireRole('SELLER'), async (r
         throw Object.assign(new Error('Coordination must be opened before the inspection can be confirmed'), { statusCode: 409, code: 'COORDINATION_NOT_OPEN' });
       }
       if (!coordination.sellerSubmittedAt) {
-        throw Object.assign(new Error('Save your site handoff details before confirming the inspector on-site'), { statusCode: 409, code: 'COORDINATION_SELLER_INCOMPLETE' });
+        throw Object.assign(new Error('Save your site handoff details before accepting the inspector and fee'), { statusCode: 409, code: 'COORDINATION_SELLER_INCOMPLETE' });
       }
       if (!coordination.inspectorSubmittedAt) {
-        throw Object.assign(new Error('Waiting for the inspector to share their arrival details. You can confirm once they have submitted their handoff.'), { statusCode: 409, code: 'COORDINATION_INSPECTOR_INCOMPLETE' });
+        throw Object.assign(new Error('Waiting for the inspector to share their arrival details. You can accept once they have submitted their handoff.'), { statusCode: 409, code: 'COORDINATION_INSPECTOR_INCOMPLETE' });
       }
 
       const now = new Date();
@@ -619,14 +619,19 @@ router.post('/:id/seller-confirm', authenticate, requireRole('SELLER'), async (r
         },
         data: {
           sellerConfirmedAt: now,
-          inspectorOnSiteConfirmedAt: now,
-          inspectorOnSiteConfirmedBy: req.user.id,
+          // Accepting the inspector and fee does NOT mean the inspector is on site.
+          // Arrival is proven later by the inspector's check-in (GPS + photo +
+          // optional handshake code): see routes/inspectionArrival.js.
+          arrivalCodeSalt: newCodeSalt(),
+          arrivalCodeFailedAttempts: 0,
           feeTermsLockedAt: now,
           lockedFee: request.fee,
           lockedFeePayer: request.feePayer,
           lockedBuyerFeeAmount: request.feePayer === 'SELLER' ? null : request.feePayer === 'SPLIT' ? Math.round(Number(request.fee) * 50) / 100 : request.fee,
           lockedSellerFeeAmount: request.feePayer === 'BUYER' ? null : request.feePayer === 'SPLIT' ? Math.round((Number(request.fee) - Math.round(Number(request.fee) * 50) / 100) * 100) / 100 : request.fee,
-          workflowDueAt: computeInspectionPaymentDueAt(),
+          // The next deadline is the arrival window; the 24h fee-payment clock
+          // starts only once the arrival is confirmed.
+          workflowDueAt: new Date(Date.now() + arrivalConfig.arrivalWindowHours() * 60 * 60 * 1000),
           coordinationDueAt: null,
           startDueAt: null,
           sellerMessage: message || null,
@@ -642,29 +647,29 @@ router.post('/:id/seller-confirm', authenticate, requireRole('SELLER'), async (r
         action: 'INSPECTION_SELLER_CONFIRMED',
         resourceType: 'InspectionRequest',
         resourceId: request.id,
-        metadata: { inspectorId: request.inspectorId, message, inspectorOnSiteConfirmed: true },
+        metadata: { inspectorId: request.inspectorId, message, inspectorOnSiteConfirmed: false },
       });
       await recordOrderEvent(tx, {
         orderId: request.orderId,
         actorId: req.user.id,
         type: 'INSPECTION_ACCEPTED',
-        metadata: { inspectionRequestId: request.id, sellerConfirmed: true, inspectorOnSiteConfirmed: true, message },
+        metadata: { inspectionRequestId: request.id, sellerConfirmed: true, inspectorOnSiteConfirmed: false, message },
       });
 
       return {
         sellerConfirmedAt: now.toISOString(),
-        inspectorOnSiteConfirmedAt: now.toISOString(),
+        arrivalDueAt: new Date(now.getTime() + arrivalConfig.arrivalWindowHours() * 60 * 60 * 1000).toISOString(),
       };
     });
 
     return res.json({
-      message: 'Inspector confirmed on-site. The designated payer(s) may now pay the agreed inspection fee.',
+      message: 'Inspector and fee accepted. When the inspector arrives they check in on site; the inspection fee can be paid once their arrival is confirmed.',
       ...result,
     });
   } catch (error) {
     req.log.error({ err: error }, 'SELLER INSPECTION CONFIRM ERROR');
     return res.status(error.statusCode || 500).json({
-      error: error.message || 'Could not confirm inspection',
+      error: error.message || 'Could not accept the inspector and fee',
       ...(error.code ? { code: error.code } : {}),
     });
   }
@@ -673,7 +678,7 @@ router.post('/:id/seller-confirm', authenticate, requireRole('SELLER'), async (r
 router.post('/:id/inspector-arrived', authenticate, requireRole('SELLER'), async (req, res) => {
   return res.status(410).json({
     code: 'ENDPOINT_MERGED',
-    error: 'The inspector-arrival confirmation has been merged into the seller confirmation. Use POST /inspections/:id/seller-confirm.',
+    error: 'Arrival is now proven by the inspector checking in. Use POST /inspections/:id/arrival/check-in (inspector) and POST /inspections/:id/arrival/confirm or /arrival/dispute (seller).',
   });
 });
 

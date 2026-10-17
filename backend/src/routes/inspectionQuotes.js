@@ -39,6 +39,9 @@ const {
   ensureOpenCoordination,
 } = require('../services/inspectionCoordinationService');
 
+const { reliabilityFor } = require('../services/inspectionArrivalService');
+const { compareBids } = require('../services/inspectionArrivalLogic');
+
 const {
   noticeInspectionWaitingLocked,
   noticeInspectionWaitingUnlocked,
@@ -349,7 +352,21 @@ router.get(
         orderBy: [{ status: 'asc' }, { amount: 'asc' }, { createdAt: 'asc' }],
       });
 
-      return res.json({ quotes });
+      // Rank bids by inspector reliability (attendance, punctuality, report speed), then fee.
+      // The requester can still pick any bid; this only changes the order and adds the signals.
+      const reliability = await reliabilityFor(prisma, quotes.map((q) => q.inspectorId));
+      const withReliability = quotes.map((q) => ({
+        ...q,
+        reliability: reliability.get(q.inspectorId),
+        inspector: { ...q.inspector, reliability: reliability.get(q.inspectorId) },
+      }));
+      const statusRank = new Map();
+      quotes.forEach((q) => { if (!statusRank.has(q.status)) statusRank.set(q.status, statusRank.size); });
+      withReliability.sort((a, b) => (statusRank.get(a.status) - statusRank.get(b.status)) || compareBids(a, b));
+      let pendingRank = 0;
+      const ranked = withReliability.map((q) => (q.status === 'PENDING' ? { ...q, rank: ++pendingRank } : q));
+
+      return res.json({ quotes: ranked });
     } catch (error) {
       req.log.error({ err: error }, 'GET INSPECTION QUOTES ERROR:');
       return res.status(500).json({ error: 'Could not load inspection quotes' });
