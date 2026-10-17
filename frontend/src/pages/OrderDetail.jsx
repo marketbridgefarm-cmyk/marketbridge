@@ -1032,7 +1032,7 @@ export default function OrderDetail() {
     confirmInspectorArrived: (requestId) =>
       run(
         `inspector-arrived-${requestId}`,
-        () => api.post(`/inspections/${requestId}/inspector-arrived`),
+        () => api.post(`/inspections/${requestId}/arrival/confirm`),
         'Could not confirm inspector arrival'
       ),
     payInspection: (request) => payInspection(request),
@@ -1071,6 +1071,7 @@ export default function OrderDetail() {
         'Could not respond to price review'
       ),
     onScrollToPayment: () => scrollToId('payment-center', 150),
+    onReload: reload,
   };
 
   const canCancelOrder = Boolean(

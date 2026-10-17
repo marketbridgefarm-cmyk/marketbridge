@@ -365,7 +365,7 @@ export default function Dashboard() {
     setInspectionBusy(requestId);
     try {
       await api.post(`/inspections/${requestId}/seller-confirm`, { message: inspectionMessages[requestId] || '' });
-      toast('Inspection confirmed. The inspector may now start work.');
+      toast('Inspector and fee accepted. The inspector checks in on site; the fee is paid after their arrival is confirmed.');
       await loadAll();
     } catch (err) {
       toast(err.response?.data?.error || 'Could not confirm inspection');
@@ -728,8 +728,8 @@ export default function Dashboard() {
             </div>
 
             <section className="panel" aria-labelledby="seller-inspection-review-title">
-              <div className="panel-head"><h3 id="seller-inspection-review-title">Inspection confirmations</h3></div>
-              <p className="muted">An agreed inspector cannot begin until you confirm. Other inspector bids remain visible in the competition.</p>
+              <div className="panel-head"><h3 id="seller-inspection-review-title">Inspector and fee acceptance</h3></div>
+              <p className="muted">An agreed inspector cannot begin until you accept them and they check in on site. Other inspector bids remain visible in the competition.</p>
               {sellerInspections.filter((r) => r.status === 'ACCEPTED' || r.status === 'IN_PROGRESS').length === 0 ? (
                 <p>No inspections are awaiting seller review.</p>
               ) : sellerInspections.filter((r) => r.status === 'ACCEPTED' || r.status === 'IN_PROGRESS').map((r) => (
@@ -742,7 +742,7 @@ export default function Dashboard() {
                   <label style={{ display: 'block', margin: '8px 0' }}>Message to buyer / inspector
                     <select value={inspectionMessages[r.id] || ''} onChange={(e) => setInspectionMessages((old) => ({ ...old, [r.id]: e.target.value }))} style={{ display: 'block', width: '100%', marginTop: 4 }}>
                       <option value="">Choose a message</option>
-                      <option value="I confirm the selected inspector and agreed fee.">I confirm the selected inspector and agreed fee.</option>
+                      <option value="I confirm the selected inspector and agreed fee.">I accept the selected inspector and agreed fee.</option>
                       <option value="The produce is ready for inspection.">The produce is ready for inspection.</option>
                       <option value="Please coordinate the inspection time with the buyer.">Please coordinate the inspection time with the buyer.</option>
                       <option value="Please contact me before visiting.">Please contact me before visiting.</option>

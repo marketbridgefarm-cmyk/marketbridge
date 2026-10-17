@@ -4,6 +4,7 @@ import api from '../api/client';
 import RoleSwitchCTA from '../components/RoleSwitchCTA.jsx';
 import DashboardWelcome from '../components/DashboardWelcome.jsx';
 import ImageCarousel from '../components/ImageCarousel.jsx';
+import AdminInspectionArrivals from '../components/AdminInspectionArrivals.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import './dashboards/AdminDashboard.css';
 
@@ -22,6 +23,7 @@ export default function AdminDashboard() {
   const { user } = useAuth();
 
   const [tab, setTab] = useState('overview');
+  const [disputedArrivals, setDisputedArrivals] = useState(0);
   const [tabMenuOpen, setTabMenuOpen] = useState(false);
 
   const performanceModalRef = useRef(null);
@@ -615,6 +617,7 @@ export default function AdminDashboard() {
     { key: 'orders', label: 'Orders', count: orders.length },
     { key: 'payments', label: 'Payments', count: payments.length },
     { key: 'refunds', label: 'Refunds', count: pendingRefunds.length },
+    { key: 'arrivals', label: 'Inspector Arrivals', count: disputedArrivals },
     { key: 'operations', label: 'Operations & Audit', count: (operations?.queues?.reconciliationPayments || 0) + (operations?.queues?.openDisputes || 0) },
   ];
 
@@ -1823,6 +1826,8 @@ export default function AdminDashboard() {
             </div>
           </div>
         )}
+
+        {tab === 'arrivals' && <AdminInspectionArrivals onCount={setDisputedArrivals} />}
 
         {tab === 'operations' && (
           <div>

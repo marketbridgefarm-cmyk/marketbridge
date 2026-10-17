@@ -11,6 +11,7 @@ import './dashboards/InspectorDashboard.css';
 import ProviderReleaseDialog from '../components/ProviderReleaseDialog.jsx';
 import ProviderStandingBanner from '../components/ProviderStandingBanner.jsx';
 import InspectionCoordinationInspector from '../components/InspectionCoordinationInspector.jsx';
+import InspectionArrivalPanel, { MyReliability } from '../components/InspectionArrivalPanel.jsx';
 import { InspectionRequestSummary } from '../components/RequestScopeSummary.jsx';
 import { BID_MESSAGES } from '../components/RequestOptions.js';
 
@@ -115,7 +116,7 @@ function getNextStep(r) {
       return { text: 'Waiting for the seller to confirm your fee and agreed terms.', tone: 'wait' };
     }
     if (!r.inspectorOnSiteConfirmedAt) {
-      return { text: 'Waiting for the seller to confirm your arrival on site.', tone: 'wait' };
+      return { text: 'Check in on site when you arrive, so your arrival can be confirmed.', tone: 'info' };
     }
     return { text: 'Seller confirmed everything. You can start the inspection now.', tone: 'info' };
   }
@@ -514,6 +515,7 @@ export default function InspectorDashboard() {
   return (
     <div className="sd-dashboard">
       <ProviderStandingBanner />
+      <MyReliability />
 
       <section>
         <DashboardWelcome
@@ -1030,7 +1032,7 @@ export default function InspectorDashboard() {
                                     ) : !r.sellerConfirmedAt ? (
                                       <p role="status" className="sd-muted">Waiting for seller confirmation of your fee.</p>
                                     ) : (
-                                      <p role="status" className="sd-muted">Waiting for seller to confirm your arrival on site.</p>
+                                      <InspectionArrivalPanel requestId={r.id} onChanged={loadAll} />
                                     )}
 
                                     {acceptedQuote && !paid && (
