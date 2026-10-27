@@ -851,6 +851,8 @@
 
 /* Tables: scroll on wide data; stack rows on small screens when marked --stack */
 .admin-control-center .ac-table-shell {
+  --table-accent: var(--admin-accent);
+  --table-tint: rgba(217, 119, 87, .07);
   width: 100%;
   overflow-x: auto;
   overscroll-behavior-x: contain;
@@ -933,6 +935,115 @@
 
 .admin-control-center .sd-table--stack {
   min-width: 760px;
+}
+
+/* Each data table gets a restrained accent that matches its job. The :has()
+   selectors use existing cell labels, so the JSX does not need table wrappers. */
+.admin-control-center .ac-table-shell:has(.sd-table td[data-label="Rating"]) {
+  --table-accent: var(--admin-green);
+  --table-tint: rgba(126, 224, 160, .07);
+}
+
+.admin-control-center .ac-table-shell:has(.sd-table td[data-label="Parties"]) {
+  --table-accent: var(--admin-blue);
+  --table-tint: rgba(143, 207, 244, .07);
+}
+
+.admin-control-center .ac-table-shell:has(.sd-table td[data-label="Analytics"]) {
+  --table-accent: var(--admin-accent-bright);
+  --table-tint: rgba(217, 119, 87, .08);
+}
+
+.admin-control-center .ac-table-shell:has(.ac-table td:nth-child(6) .ac-actions) {
+  --table-accent: var(--admin-gold);
+  --table-tint: rgba(242, 202, 119, .07);
+}
+
+.admin-control-center .ac-table-shell:has(.ac-table td:nth-child(6) > .sd-btn):not(:has(.ac-actions)) {
+  --table-accent: #c5a3ff;
+  --table-tint: rgba(197, 163, 255, .07);
+}
+
+.admin-control-center .ac-table-shell:has(.ac-table thead th:nth-child(4)):not(:has(.ac-table thead th:nth-child(5))) {
+  --table-accent: var(--admin-red);
+  --table-tint: rgba(255, 138, 128, .07);
+}
+
+.admin-control-center .ac-table-shell:has(.ac-table thead th:nth-child(7)) {
+  --table-accent: var(--admin-gold);
+  --table-tint: rgba(242, 202, 119, .07);
+}
+
+.admin-control-center .ac-table-shell:has(.sd-table td[data-label="Buyer"]) {
+  --table-accent: var(--admin-blue);
+  --table-tint: rgba(143, 207, 244, .07);
+}
+
+.admin-control-center .ac-table-shell:has(.sd-table td[data-label="Chapa refund ID"]) {
+  --table-accent: var(--admin-green);
+  --table-tint: rgba(126, 224, 160, .07);
+}
+
+.admin-control-center .ac-table-shell:has(.sd-table td[data-label="Status change"]) {
+  --table-accent: #79d7d1;
+  --table-tint: rgba(121, 215, 209, .07);
+}
+
+.admin-control-center .ac-table-shell:has(.sd-table td[data-label="Details"]) {
+  --table-accent: #c8bca7;
+  --table-tint: rgba(200, 188, 167, .07);
+}
+
+.admin-control-center .ac-table-shell:has(.sd-table),
+.admin-control-center .ac-table-shell:has(.ac-table) {
+  border-color: color-mix(in srgb, var(--table-accent) 38%, var(--admin-line));
+  box-shadow: inset 0 2px 0 color-mix(in srgb, var(--table-accent) 70%, transparent);
+}
+
+.admin-control-center .ac-table-shell:has(.sd-table) .sd-table th,
+.admin-control-center .ac-table-shell:has(.ac-table) .ac-table th {
+  border-top: 2px solid var(--table-accent);
+  background: linear-gradient(100deg, var(--table-tint), transparent 72%), #30302f;
+}
+
+.admin-control-center .ac-table-shell:has(.sd-table) tbody tr:nth-child(even),
+.admin-control-center .ac-table-shell:has(.ac-table) tbody tr:nth-child(even) {
+  background: var(--table-tint);
+}
+
+.admin-control-center .ac-table-shell:has(.sd-table) tbody tr:hover,
+.admin-control-center .ac-table-shell:has(.ac-table) tbody tr:hover {
+  background: color-mix(in srgb, var(--table-tint) 70%, var(--admin-surface-soft));
+}
+
+.admin-control-center .ac-table-shell:has(.sd-table td[data-label="Rating"]) td[data-label="Rating"],
+.admin-control-center .ac-table-shell:has(.sd-table td[data-label="Analytics"]) td[data-label="Analytics"],
+.admin-control-center .ac-table-shell:has(.sd-table td[data-label="Buyer"]) td[data-label="Value"],
+.admin-control-center .ac-table-shell:has(.sd-table td[data-label="Chapa refund ID"]) td[data-label="Amount"] {
+  color: var(--table-accent);
+  font-variant-numeric: tabular-nums;
+  font-weight: 750;
+}
+
+.admin-control-center .ac-table-shell:has(.sd-table td[data-label="Status change"]) td[data-label="Status change"] {
+  color: var(--admin-blue);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: .74rem;
+}
+
+.admin-control-center .ac-table-shell:has(.sd-table td[data-label="Details"]) td[data-label="Details"] {
+  max-width: 440px;
+  color: #cbc4b7;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: .72rem;
+  overflow-wrap: anywhere;
+}
+
+.admin-control-center .ac-table-shell:has(.ac-table td:nth-child(6) .ac-actions) .ac-table td:nth-child(5),
+.admin-control-center .ac-table-shell:has(.ac-table thead th:nth-child(4)):not(:has(.ac-table thead th:nth-child(5))) .ac-table td:nth-child(2),
+.admin-control-center .ac-table-shell:has(.ac-table thead th:nth-child(7)) .ac-table td:nth-child(5) {
+  color: var(--table-accent);
+  font-variant-numeric: tabular-nums;
 }
 
 /* Notices */
@@ -1191,9 +1302,10 @@
   .admin-control-center .sd-table--stack tbody tr {
     display: block;
     border: 1px solid var(--admin-line);
+    border-left: 3px solid var(--table-accent);
     border-radius: 13px;
     padding: 5px 10px;
-    background: var(--admin-surface);
+    background: linear-gradient(110deg, var(--table-tint), transparent 62%), var(--admin-surface);
   }
 
   .admin-control-center .sd-table--stack tbody tr:hover {
@@ -1215,7 +1327,7 @@
   .admin-control-center .sd-table--stack tbody td::before {
     display: block;
     margin-bottom: 4px;
-    color: var(--admin-muted);
+    color: color-mix(in srgb, var(--table-accent) 75%, var(--admin-muted));
     content: attr(data-label);
     font-size: .68rem;
     font-weight: 800;
