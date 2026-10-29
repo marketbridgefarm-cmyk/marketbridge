@@ -1969,3 +1969,28 @@
 .sd-dashboard.admin-control-center table.sd-table--stack tbody td[data-label=""],
 .sd-dashboard.admin-control-center table.sd-table--stack tbody td[data-label="Action"],
 .sd-dashboard.admin-control-center table.sd-table--stack tbody td[data-label="Actions"] { border-top: 1.5px solid var(--ac-border) !important; padding-top: 14px !important; }
+
+/* ===== Orders card tweaks: custom eyebrow, large buttons, plain neutral status ===== */
+
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td[data-eyebrow]:first-child::before { content: attr(data-eyebrow); }
+
+/* large action buttons */
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td > .sd-btn,
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td .ac-actions .sd-btn {
+  display: flex;
+  width: 100%;
+  min-height: 52px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  padding: 12px 18px;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+/* status badge without a fill when it has no tone (e.g. CONFIRMED) */
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td[data-label="Status"] .sd-badge:not(.sd-good):not(.sd-red):not(.sd-warn) {
+  background: transparent;
+  border-color: var(--ac-border-strong, var(--ac-border));
+  color: var(--ac-text);
+}
