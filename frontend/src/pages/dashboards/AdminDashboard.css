@@ -1761,3 +1761,61 @@
 .sd-dashboard.admin-control-center table.sd-table--stack tbody td .ac-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .sd-dashboard.admin-control-center table.sd-table--stack tbody td .ac-actions .sd-btn,
 .sd-dashboard.admin-control-center table.sd-table--stack tbody td > .sd-btn { min-height: 38px; }
+
+/* ===== Section menu as a bottom-right floating action button ===== */
+
+.sd-dashboard.admin-control-center .ac-tabs-shell {
+  position: fixed;
+  right: 16px;
+  bottom: calc(var(--oc-nav-h, 0px) + env(safe-area-inset-bottom, 0px) + 16px);
+  z-index: 60;
+  width: auto;
+  margin: 0;
+  top: auto;
+}
+.sd-dashboard.admin-control-center .ac-fab {
+  position: relative;
+  display: grid;
+  width: 56px;
+  min-height: 56px;
+  height: 56px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--admin-accent);
+  color: var(--admin-accent-ink);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, .45);
+}
+.sd-dashboard.admin-control-center .ac-fab:hover,
+.sd-dashboard.admin-control-center .ac-fab.open { background: var(--admin-accent-bright); border: 0; }
+.sd-dashboard.admin-control-center .ac-fab-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  display: grid;
+  min-width: 22px;
+  height: 22px;
+  place-items: center;
+  padding: 0 6px;
+  border: 2px solid var(--admin-bg);
+  border-radius: 999px;
+  background: var(--admin-red);
+  color: #2a0d0a;
+  font-size: 11px;
+  font-weight: 800;
+}
+.sd-dashboard.admin-control-center .ac-tabs-shell .ac-menu-list {
+  top: auto;
+  right: 0;
+  bottom: calc(100% + 12px);
+  left: auto;
+  width: min(300px, calc(100vw - 32px));
+  max-height: min(65vh, 480px);
+}
+.sd-dashboard.admin-control-center .ac-tabs-shell .ac-menu-item { min-height: 46px; font-size: .92rem; }
+@media (max-width: 760px) {
+  /* clears the bottom nav bar (about 64px) */
+  .sd-dashboard.admin-control-center .ac-tabs-shell { position: fixed; bottom: calc(80px + env(safe-area-inset-bottom, 0px)); }
+  .sd-dashboard.admin-control-center { padding-bottom: 160px; }
+}
