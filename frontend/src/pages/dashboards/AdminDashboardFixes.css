@@ -560,17 +560,6 @@
   letter-spacing: -.4px;
 }
 
-.admin-control-center.admin-control-center .ac-module {
-  min-height: 54px;
-  border: 1.5px solid var(--ac-border);
-  border-radius: 18px;
-}
-.admin-control-center.admin-control-center .ac-module-icon {
-  width: 30px;
-  height: 30px;
-  flex: 0 0 30px;
-  border-radius: 12px;
-}
 
 /* ── Dialogs and MFA card ───────────────────────────────── */
 
@@ -651,4 +640,164 @@
   .admin-control-center.admin-control-center .ac-metric { padding: 16px 16px 44px; }
   .admin-control-center.admin-control-center .ac-metric-value { font-size: 22px; }
   .admin-control-center.admin-control-center .ac-actions .sd-btn { min-width: 100%; }
+}
+
+
+/* ── Layout redesign: compact header, tighter panels, fluid grids ─────── */
+
+.admin-control-center.admin-control-center .ac-hero--compact {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px;
+  border-radius: 18px;
+}
+.admin-control-center.admin-control-center .ac-hero--compact .ac-shield {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  border-radius: 13px;
+}
+.admin-control-center.admin-control-center .ac-hero-text { min-width: 0; flex: 1; }
+.admin-control-center.admin-control-center .ac-hero-text h1 {
+  margin: 2px 0 0;
+  font-size: clamp(20px, 3vw, 26px);
+  line-height: 1.1;
+}
+.admin-control-center.admin-control-center .ac-hero--compact .ac-hero-actions {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+}
+
+.admin-control-center.admin-control-center .ac-stat-strip {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+  gap: 10px;
+  margin: 14px 0 0;
+}
+.admin-control-center.admin-control-center .ac-small-stat {
+  padding: 12px 14px;
+  border-radius: 14px;
+}
+
+.admin-control-center.admin-control-center .ac-panel {
+  margin: 12px 0;
+  border-radius: 18px;
+}
+
+@media (max-width: 760px) {
+  .admin-control-center.admin-control-center .ac-hero--compact {
+    flex-wrap: wrap;
+    padding: 12px 14px;
+  }
+  .admin-control-center.admin-control-center .ac-hero--compact .ac-hero-actions {
+    width: 100%;
+  }
+  .admin-control-center.admin-control-center .ac-hero--compact .ac-hero-actions > * {
+    flex: 1 1 0;
+    width: auto;
+    text-align: center;
+  }
+  .admin-control-center.admin-control-center .ac-stat-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  /* an odd last stat spans the full row instead of sitting alone */
+  .admin-control-center.admin-control-center .ac-stat-strip > :last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+  .admin-control-center.admin-control-center .ac-small-stat {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+  .admin-control-center.admin-control-center .ac-toolbar > .sd-btn { width: 100%; }
+}
+
+/* ── Flat layout: no boxes inside boxes ────────────────────────────────
+   Sections are plain blocks separated by hairlines; stats are divided
+   cells; tables and queue rows sit directly on the page. */
+
+.admin-control-center.admin-control-center .ac-hero--compact {
+  padding: 4px 0 14px;
+  border: 0;
+  border-bottom: 1px solid var(--ac-border);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.admin-control-center.admin-control-center .ac-hero--compact .ac-shield {
+  border: 0;
+  background: transparent;
+  width: 32px;
+  flex-basis: 32px;
+  height: 32px;
+}
+
+.admin-control-center.admin-control-center .ac-panel {
+  margin: 0;
+  padding: 22px 0;
+  border: 0;
+  border-bottom: 1px solid var(--ac-border);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.admin-control-center.admin-control-center .ac-panel:last-child { border-bottom: 0; }
+
+/* stats: one divided strip, no tiles */
+.admin-control-center.admin-control-center .ac-stat-strip {
+  gap: 0;
+  margin: 8px 0 0;
+  border-top: 1px solid var(--ac-border);
+}
+.admin-control-center.admin-control-center .ac-small-stat {
+  padding: 14px 12px 14px 0;
+  border: 0;
+  border-bottom: 1px solid var(--ac-border);
+  border-radius: 0;
+  background: transparent;
+}
+
+/* tables sit on the page */
+.admin-control-center.admin-control-center .ac-table-shell {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+/* overview: drop the outer box, queue rows become plain lines */
+.dash-overview--admin {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.dash-overview--admin .dov-item,
+.dash-overview--admin .dov-item--row {
+  min-height: 46px;
+  padding: 10px 0;
+  border: 0;
+  border-bottom: 1px solid var(--ac-border, #e2e8f0);
+  border-radius: 0;
+  background: transparent;
+}
+.dash-overview--admin .dov-item:hover { background: transparent; text-decoration: underline; }
+.dash-overview--admin .dov-list { display: block; margin: 0; padding: 0; list-style: none; }
+.dash-overview--admin .dov-list li:last-child .dov-item { border-bottom: 0; }
+
+@media (max-width: 760px) {
+  .admin-control-center.admin-control-center .ac-stat-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .admin-control-center.admin-control-center .ac-small-stat {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    grid-column: 1 / -1;
+    padding: 12px 0;
+  }
+  .admin-control-center.admin-control-center .ac-panel { padding: 18px 0; }
+  .dash-overview--admin { padding: 0; }
 }
