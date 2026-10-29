@@ -1638,8 +1638,8 @@ export default function AdminDashboard() {
                 <table className="sd-table sd-table--stack">
                   <thead>
                     <tr>
-                      <th>Order</th>
                       <th>Listing</th>
+                      <th>Order</th>
                       <th>Buyer</th>
                       <th>Seller</th>
                       <th>Value</th>
@@ -1656,8 +1656,8 @@ export default function AdminDashboard() {
                         !['COMPLETED', 'CANCELLED'].includes(o.status) && !transportInMotion;
                       return (
                         <tr key={o.id}>
+                          <td data-label="Listing" data-eyebrow="Order">{o.listing?.title || o.listing?.cropType || '—'}</td>
                           <td data-label="Order"><span className="ac-code">{o.id.slice(0, 8)}</span></td>
-                          <td data-label="Listing">{o.listing?.title || o.listing?.cropType || '—'}</td>
                           <td data-label="Buyer">{o.buyer?.name || '—'}</td>
                           <td data-label="Seller">{o.seller?.name || '—'}</td>
                           <td data-label="Value">{Number(o.finalPrice).toLocaleString()} ETB</td>
