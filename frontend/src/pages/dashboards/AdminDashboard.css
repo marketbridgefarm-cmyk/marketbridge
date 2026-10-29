@@ -1819,3 +1819,76 @@
   .sd-dashboard.admin-control-center .ac-tabs-shell { position: fixed; bottom: calc(80px + env(safe-area-inset-bottom, 0px)); }
   .sd-dashboard.admin-control-center { padding-bottom: 160px; }
 }
+
+/* ===== Compact row cards: heading + status on top, fields in a 2-column grid ===== */
+
+.sd-dashboard.admin-control-center table.sd-table--stack tbody {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+  gap: 12px;
+}
+.sd-dashboard.admin-control-center table.sd-table--stack tbody tr {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px 16px;
+  align-items: start;
+  padding: 14px 16px !important;
+  border: 1px solid var(--ac-border) !important;
+  border-top: 3px solid var(--admin-accent) !important;
+  border-radius: 14px;
+  background: var(--ac-surface-soft) !important;
+}
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td {
+  grid-column: auto;
+  padding: 0 !important;
+  border: 0 !important;
+  font-size: 14px;
+  line-height: 1.35;
+}
+/* heading cell */
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td:first-child {
+  grid-column: 1 / -1;
+  padding: 0 !important;
+  font-size: 15px;
+  font-weight: 700;
+}
+/* heading shares its row with the status badge when there is one */
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td:first-child:has(~ td[data-label="Status"]) { grid-column: 1; grid-row: 1; }
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td[data-label="Status"] {
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: end;
+}
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td[data-label="Status"]::before { content: none; }
+/* wide content and actions take the full row */
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td[data-label=""],
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td[data-label="Action"],
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td[data-label="Actions"],
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td[data-label="Details"],
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td[data-label="Reason"],
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td[data-label="Reasons"],
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td[data-label="Attempted reason"],
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td[data-label="Parties"],
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td[data-label="Campaign"],
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td[data-label="Financials"],
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td[data-label="Analytics"],
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td[data-label="Status change"],
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td[data-label="Resource"],
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td[data-label="Chapa refund ID"],
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td[data-label="Chapa tx ref (admin)"],
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td[colspan] { grid-column: 1 / -1; }
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td[data-label=""],
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td[data-label="Action"],
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td[data-label="Actions"] {
+  padding-top: 12px !important;
+  border-top: 1px solid var(--ac-border) !important;
+}
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td[data-label="Action"]::before,
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td[data-label="Actions"]::before { content: none; }
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td::before { font-size: 10.5px; margin-bottom: 2px; }
+/* emphasise money values */
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td[data-label="Value"],
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td[data-label="Amount"] { font-weight: 700; font-size: 15px; }
+/* actions: buttons share the row evenly */
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td .ac-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td .ac-actions .sd-btn,
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td > .sd-btn { flex: 1 1 auto; min-height: 40px; justify-content: center; }
