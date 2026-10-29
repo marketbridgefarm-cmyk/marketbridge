@@ -171,12 +171,18 @@ export default function AdminDashboard() {
       }
     }
 
+    function handleKey(event) {
+      if (event.key === 'Escape') setTabMenuOpen(false);
+    }
+
     document.addEventListener('mousedown', handleOutsideClick);
     document.addEventListener('touchstart', handleOutsideClick);
+    document.addEventListener('keydown', handleKey);
 
     return () => {
       document.removeEventListener('mousedown', handleOutsideClick);
       document.removeEventListener('touchstart', handleOutsideClick);
+      document.removeEventListener('keydown', handleKey);
     };
   }, [tabMenuOpen]);
 
@@ -610,6 +616,10 @@ export default function AdminDashboard() {
   ];
 
   const activeTabItem = tabItems.find((item) => item.key === tab) || tabItems[0];
+  // Badge on the closed menu: alerts from queues that need action (not plain record counts).
+  const totalTabAlerts = tabItems
+    .filter((item) => !['overview', 'orders', 'payments'].includes(item.key))
+    .reduce((sum, item) => sum + (item.count || 0), 0);
 
   // Queues shown in the overview card. Counts reuse the tab badges so the two always agree.
   const tabCount = (key) => tabItems.find((item) => item.key === key)?.count || 0;
@@ -800,23 +810,41 @@ export default function AdminDashboard() {
 
       <section className="ac-section">
         <div className="ac-tabs-shell" ref={tabsNavRef}>
-          <div className="ac-tabs">
-            {tabItems.map((item) => (
-              <button
-                key={item.key}
-                type="button"
-                className={`ac-tab ${tab === item.key ? 'active' : ''}`}
-                onClick={() => {
-                  clearMessages();
-                  setTab(item.key);
-                  setTabMenuOpen(false);
-                }}
-              >
-                {item.label}
-                {item.count > 0 && <span className="ac-tab-count">{item.count}</span>}
-              </button>
-            ))}
-          </div>
+          <button
+            type="button"
+            className={`ac-menu-trigger ${tabMenuOpen ? 'open' : ''}`}
+            aria-haspopup="listbox"
+            aria-expanded={tabMenuOpen}
+            onClick={() => setTabMenuOpen((open) => !open)}
+          >
+            <span className="ac-menu-label">{activeTabItem.label}</span>
+            {totalTabAlerts > 0 && !tabMenuOpen && (
+              <span className="ac-tab-count" title="Items needing attention">{totalTabAlerts}</span>
+            )}
+            <span className="ac-menu-chevron" aria-hidden="true" />
+          </button>
+          {tabMenuOpen && (
+            <ul className="ac-menu-list" role="listbox" aria-label="Admin sections">
+              {tabItems.map((item) => (
+                <li key={item.key} role="presentation">
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={tab === item.key}
+                    className={`ac-menu-item ${tab === item.key ? 'active' : ''}`}
+                    onClick={() => {
+                      clearMessages();
+                      setTab(item.key);
+                      setTabMenuOpen(false);
+                    }}
+                  >
+                    <span>{item.label}</span>
+                    {item.count > 0 && <span className="ac-tab-count">{item.count}</span>}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
 
         {tab === 'overview' && (
