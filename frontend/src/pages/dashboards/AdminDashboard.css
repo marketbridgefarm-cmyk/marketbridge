@@ -634,53 +634,6 @@
   font-size: .67rem;
 }
 
-.admin-control-center .ac-module-list {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  margin-top: 14px;
-}
-
-.admin-control-center .ac-module {
-  display: flex;
-  min-width: 0;
-  align-items: flex-start;
-  gap: 10px;
-  border: 1px solid rgba(126, 224, 160, .16);
-  border-radius: 12px;
-  padding: 10px 12px;
-  background: rgba(126, 224, 160, .055);
-  color: var(--admin-text);
-  font-size: .84rem;
-}
-
-.admin-control-center .ac-module.off {
-  border-color: var(--admin-line);
-  background: rgba(255, 255, 255, .02);
-  color: var(--admin-muted);
-}
-
-.admin-control-center .ac-module-icon {
-  display: inline-grid;
-  width: 20px;
-  height: 20px;
-  flex: 0 0 20px;
-  place-items: center;
-  border-radius: 50%;
-  background: rgba(126, 224, 160, .13);
-  color: var(--admin-green);
-  font-size: .75rem;
-  font-weight: 900;
-}
-
-.admin-control-center .ac-module.off .ac-module-icon {
-  background: var(--admin-surface-soft);
-  color: var(--admin-muted);
-}
-
-.admin-control-center .ac-module small {
-  color: var(--admin-gold);
-}
 
 .admin-control-center .ac-grid {
   display: grid;
@@ -1299,8 +1252,7 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .admin-control-center .ac-grid,
-  .admin-control-center .ac-module-list {
+  .admin-control-center .ac-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 
@@ -1518,3 +1470,215 @@
     transition-duration: .01ms !important;
   }
 }
+
+
+/* ===== Admin layout redesign (compact header, flat sections, per-user cards) ===== */
+/* ── Layout redesign: compact header, tighter panels, fluid grids ─────── */
+
+.admin-control-center .ac-hero--compact {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px;
+  border-radius: 18px;
+}
+.admin-control-center .ac-hero--compact .ac-shield {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  border-radius: 13px;
+}
+.admin-control-center .ac-hero-text { min-width: 0; flex: 1; }
+.admin-control-center .ac-hero-text h1 {
+  margin: 2px 0 0;
+  font-size: clamp(20px, 3vw, 26px);
+  line-height: 1.1;
+}
+.admin-control-center .ac-hero--compact .ac-hero-actions {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+}
+
+.admin-control-center .ac-stat-strip {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+  gap: 10px;
+  margin: 14px 0 0;
+}
+.admin-control-center .ac-small-stat {
+  padding: 12px 14px;
+  border-radius: 14px;
+}
+
+.admin-control-center .ac-panel {
+  margin: 12px 0;
+  border-radius: 18px;
+}
+
+@media (max-width: 760px) {
+  .admin-control-center .ac-hero--compact {
+    flex-wrap: wrap;
+    padding: 12px 14px;
+  }
+  .admin-control-center .ac-hero--compact .ac-hero-actions {
+    width: 100%;
+  }
+  .admin-control-center .ac-hero--compact .ac-hero-actions > * {
+    flex: 1 1 0;
+    width: auto;
+    text-align: center;
+  }
+  .admin-control-center .ac-stat-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  /* an odd last stat spans the full row instead of sitting alone */
+  .admin-control-center .ac-stat-strip > :last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+  .admin-control-center .ac-small-stat {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+  .admin-control-center .ac-toolbar > .sd-btn { width: 100%; }
+}
+
+/* ── Flat layout: no boxes inside boxes ────────────────────────────────
+   Sections are plain blocks separated by hairlines; stats are divided
+   cells; tables and queue rows sit directly on the page. */
+
+.admin-control-center .ac-hero--compact {
+  padding: 4px 0 14px;
+  border: 0;
+  border-bottom: 1px solid var(--ac-border);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.admin-control-center .ac-hero--compact .ac-shield {
+  border: 0;
+  background: transparent;
+  width: 32px;
+  flex-basis: 32px;
+  height: 32px;
+}
+
+.admin-control-center .ac-panel {
+  margin: 0;
+  padding: 22px 0;
+  border: 0;
+  border-bottom: 1px solid var(--ac-border);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.admin-control-center .ac-panel:last-child { border-bottom: 0; }
+
+/* stats: one divided strip, no tiles */
+.admin-control-center .ac-stat-strip {
+  gap: 0;
+  margin: 8px 0 0;
+  border-top: 1px solid var(--ac-border);
+}
+.admin-control-center .ac-small-stat {
+  padding: 14px 12px 14px 0;
+  border: 0;
+  border-bottom: 1px solid var(--ac-border);
+  border-radius: 0;
+  background: transparent;
+}
+
+/* tables sit on the page */
+.admin-control-center .ac-table-shell {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+/* overview: drop the outer box, queue rows become plain lines */
+.dash-overview--admin {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.dash-overview--admin .dov-item,
+.dash-overview--admin .dov-item--row {
+  min-height: 46px;
+  padding: 10px 0;
+  border: 0;
+  border-bottom: 1px solid var(--ac-border, #e2e8f0);
+  border-radius: 0;
+  background: transparent;
+}
+.dash-overview--admin .dov-item:hover { background: transparent; text-decoration: underline; }
+.dash-overview--admin .dov-list { display: block; margin: 0; padding: 0; list-style: none; }
+.dash-overview--admin .dov-list li:last-child .dov-item { border-bottom: 0; }
+
+@media (max-width: 760px) {
+  .admin-control-center .ac-stat-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .admin-control-center .ac-small-stat {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    grid-column: 1 / -1;
+    padding: 12px 0;
+  }
+  .admin-control-center .ac-panel { padding: 18px 0; }
+  .dash-overview--admin { padding: 0; }
+}
+
+/* ── Users: one responsive card per person ───────────────────────────── */
+
+.admin-control-center .ac-user-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
+  gap: 14px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+  border: 0;
+}
+.admin-control-center .ac-user-list > li { min-width: 0; border: 0; }
+.admin-control-center .ac-user {
+  display: flex;
+  height: 100%;
+  min-width: 0;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  overflow: hidden;
+  border: 1px solid var(--ac-border);
+  border-radius: 16px;
+  background: var(--ac-surface-soft);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .06);
+}
+.admin-control-center .ac-user-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--ac-border);
+}
+.admin-control-center .ac-user-main { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 2px; }
+.admin-control-center .ac-user-main strong { color: var(--ac-text); font-size: 16px; overflow-wrap: anywhere; }
+.admin-control-center .ac-user-sub { color: var(--ac-muted); font-size: 13px; overflow-wrap: anywhere; }
+.admin-control-center .ac-user-head > span:last-child { flex: none; }
+.admin-control-center .ac-user-body { display: grid; gap: 14px; min-width: 0; }
+.admin-control-center .ac-user-facts { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; margin: 0; font-size: 14px; }
+.admin-control-center .ac-user-facts dt { color: var(--ac-muted); }
+.admin-control-center .ac-user-facts dd { margin: 0; color: var(--ac-text); overflow-wrap: anywhere; }
+.admin-control-center .ac-user-field { display: grid; gap: 6px; min-width: 0; }
+.admin-control-center .ac-field-label { font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--ac-muted); }
+.admin-control-center .ac-wrap { display: flex; flex-wrap: wrap; gap: 6px; }
+.admin-control-center .ac-wrap .sd-btn { min-height: 34px; padding: 6px 10px; font-size: 12px; }
+.admin-control-center .ac-role-row { display: flex; gap: 8px; min-width: 0; }
+.admin-control-center .ac-role-row select { flex: 1; min-width: 0; }
+.admin-control-center .ac-user-field select { width: 100%; max-width: 100%; }
+.admin-control-center .ac-user-field > .sd-btn { width: 100%; }
+.admin-control-center .ac-user-body > .ac-user-field:last-child { margin-top: auto; }
