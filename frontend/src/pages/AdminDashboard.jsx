@@ -609,7 +609,6 @@ export default function AdminDashboard() {
     { key: 'advertising', label: 'Advertising', count: pendingAds.length },
     { key: 'recovery', label: 'Workflow Recovery', count: recoveryRequests.length + releaseReviews.length + providerStandings.filter((p) => p.status === 'SUSPENDED' && p.appealedAt).length },
     { key: 'orders', label: 'Orders', count: orders.length },
-    { key: 'payments', label: 'Payments', count: payments.length },
     { key: 'refunds', label: 'Refunds', count: pendingRefunds.length },
     { key: 'arrivals', label: 'Inspector Arrivals', count: disputedArrivals },
     { key: 'operations', label: 'Operations & Audit', count: (operations?.queues?.reconciliationPayments || 0) + (operations?.queues?.openDisputes || 0) },
@@ -618,7 +617,7 @@ export default function AdminDashboard() {
   const activeTabItem = tabItems.find((item) => item.key === tab) || tabItems[0];
   // Badge on the closed menu: alerts from queues that need action (not plain record counts).
   const totalTabAlerts = tabItems
-    .filter((item) => !['overview', 'orders', 'payments'].includes(item.key))
+    .filter((item) => !['overview', 'orders'].includes(item.key))
     .reduce((sum, item) => sum + (item.count || 0), 0);
 
   // Queues shown in the overview card. Counts reuse the tab badges so the two always agree.
@@ -688,36 +687,22 @@ export default function AdminDashboard() {
     <div className="sd-dashboard admin-control-center">
 
       <section className="ac-section">
-        <div className="ac-hero">
-          <div className="ac-hero-content">
-            <div className="ac-brand-row">
-              <div className="ac-title-row">
-                <div className="ac-shield">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                    <path d="M12 3l7 3v5c0 4.6-3 8.4-7 10-4-1.6-7-5.4-7-10V6l7-3z" />
-                    <path d="M9.5 12l1.7 1.7 3.5-3.7" />
-                  </svg>
-                </div>
-                <div>
-                  <span className="ac-kicker">MARKETBRIDGE ADMINISTRATION</span>
-                  <h1>Control Center</h1>
-                  <p className="ac-subtitle">
-                    Manage marketplace users, verification, disputes, payments, advertising, refunds,
-                    orders, fraud signals, and operational workflows from one place.
-                  </p>
-                </div>
-              </div>
-              <div className="ac-cc-pill">
-                <span className="ac-cc-dot" />
-                ADMIN ACCESS
-              </div>
-            </div>
-            <div className="ac-hero-actions">
-              <RoleSwitchCTA current="ADMIN" />
-              <Link to="/account/security" className="sd-btn">Account security</Link>
-            </div>
+        <header className="ac-hero ac-hero--compact">
+          <div className="ac-shield">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+              <path d="M12 3l7 3v5c0 4.6-3 8.4-7 10-4-1.6-7-5.4-7-10V6l7-3z" />
+              <path d="M9.5 12l1.7 1.7 3.5-3.7" />
+            </svg>
           </div>
-        </div>
+          <div className="ac-hero-text">
+            <span className="ac-kicker">MARKETBRIDGE ADMIN</span>
+            <h1>Control Center</h1>
+          </div>
+          <div className="ac-hero-actions">
+            <RoleSwitchCTA current="ADMIN" />
+            <Link to="/account/security" className="sd-btn">Security</Link>
+          </div>
+        </header>
       </section>
 
       <dialog ref={disputeModalRef} className="ac-dialog" onClose={() => setDisputeDecision(null)}>
@@ -857,40 +842,6 @@ export default function AdminDashboard() {
           />
         )}
 
-        {tab === 'overview' && (
-          <div className="ac-panel">
-            <div className="ac-panel-header">
-              <div>
-                <span className="ac-section-label">SYSTEM OVERVIEW</span>
-                <h2>Marketplace modules</h2>
-                <p>Current administrative capabilities and implementation status across the MarketBridge platform.</p>
-              </div>
-            </div>
-            <div className="ac-module-list">
-              {[
-                ['Users & role management', true],
-                ['Verification management', true],
-                ['Account suspension / activation', true],
-                ['Sellers / buyers / inspectors / truck owners', true],
-                ['Disputes & reports', true],
-                ['Fraud flags (heuristic)', true],
-                ['Listings & categories moderation', false],
-                ['Orders & payments oversight', true],
-                ['Transport jobs oversight', false],
-                ['Advertising & sponsored listings approval', true],
-                ['Commissions & revenue records', true],
-              ].map(([label, built]) => (
-                <div className={`ac-module ${built ? '' : 'off'}`} key={label}>
-                  <span className="ac-module-icon">{built ? '✓' : '○'}</span>
-                  <span>
-                    {label} {!built && <small>(backend not built yet)</small>}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
         {tab === 'users' && (
           <div className="ac-panel">
             <div className="ac-toolbar">
@@ -917,39 +868,40 @@ export default function AdminDashboard() {
               Showing <strong>{filteredUsers.length}</strong> of {users.length} users.
             </p>
 
-            <div className="ac-table-shell">
-              <table className="sd-table sd-table--stack">
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Email</th>
-                    <th>Roles</th>
-                    <th>Rating</th>
-                    <th>Verification</th>
-                    <th>Account</th>
-                    <th>Role control</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredUsers.map((item) => {
-                    const isActionLoading = actionLoading.includes(item.id);
-                    return (
-                      <tr key={item.id}>
-                        <td data-label="Name">
+            <ul className="ac-user-list">
+              {filteredUsers.map((item) => {
+                const isActionLoading = actionLoading.includes(item.id);
+                const status = item.accountStatus || 'ACTIVE';
+                return (
+                  <li key={item.id}>
+                    <details className="ac-user">
+                      <summary>
+                        <span className="ac-user-main">
                           <strong>{item.name}</strong>
-                          {item.phone && <div className="sd-muted">{item.phone}</div>}
-                          {item.location && <div className="sd-muted">{item.location}</div>}
-                        </td>
-                        <td data-label="Email">{item.email}</td>
-                        <td data-label="Roles">
-                          <div className="sd-chip-row">
+                          <span className="ac-user-sub">{item.email || item.phone || '—'}</span>
+                        </span>
+                        <span className={statusBadgeClass(status)}>{status}</span>
+                        <span className="ac-menu-chevron" aria-hidden="true" />
+                      </summary>
+
+                      <div className="ac-user-body">
+                        <dl className="ac-user-facts">
+                          {item.phone && (<><dt>Phone</dt><dd>{item.phone}</dd></>)}
+                          {item.location && (<><dt>Location</dt><dd>{item.location}</dd></>)}
+                          <dt>Rating</dt><dd>{Number(item.rating || 0).toFixed(1)}</dd>
+                        </dl>
+
+                        <div className="ac-user-field">
+                          <span className="ac-field-label">Roles</span>
+                          <div className="sd-chip-row ac-wrap">
                             {(item.roles || []).map((role) => (
                               <span className="sd-badge" key={role}>{role}</span>
                             ))}
                           </div>
-                        </td>
-                        <td data-label="Rating">{Number(item.rating || 0).toFixed(1)}</td>
-                        <td data-label="Verification">
+                        </div>
+
+                        <label className="ac-user-field">
+                          <span className="ac-field-label">Verification</span>
                           <select
                             value={item.verificationStatus || 'UNVERIFIED'}
                             onChange={(e) => setVerification(item.id, e.target.value)}
@@ -960,41 +912,18 @@ export default function AdminDashboard() {
                               <option key={option} value={option}>{option}</option>
                             ))}
                           </select>
-                        </td>
-                        <td data-label="Account">
-                          <div className="sd-account-cell">
-                            <span className={statusBadgeClass(item.accountStatus || 'ACTIVE')}>
-                              {item.accountStatus || 'ACTIVE'}
-                            </span>
-                            {item.accountStatus === 'SUSPENDED' ? (
-                              <button
-                                type="button"
-                                className="sd-btn sd-btn-primary"
-                                disabled={isActionLoading}
-                                onClick={() => setAccountStatus(item.id, 'ACTIVE')}
-                              >
-                                {isActionLoading ? 'Working…' : 'Activate'}
-                              </button>
-                            ) : (
-                              <button
-                                type="button"
-                                className="sd-btn sd-btn-outline"
-                                disabled={isActionLoading}
-                                onClick={() => setAccountStatus(item.id, 'SUSPENDED')}
-                              >
-                                {isActionLoading ? 'Working…' : 'Suspend'}
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                        <td data-label="Role control">
-                          <div className="ac-role-actions">
+                        </label>
+
+                        <div className="ac-user-field">
+                          <span className="ac-field-label">Role control</span>
+                          <div className="ac-role-row">
                             <select
                               value={roleSelections[item.id] || ''}
                               onChange={(e) =>
                                 setRoleSelections((current) => ({ ...current, [item.id]: e.target.value }))
                               }
                               disabled={isActionLoading}
+                              aria-label="Role to add"
                             >
                               <option value="">Select role...</option>
                               {ROLE_OPTIONS.map((role) => (
@@ -1007,42 +936,62 @@ export default function AdminDashboard() {
                               disabled={isActionLoading || !roleSelections[item.id]}
                               onClick={() => addRole(item.id)}
                             >
-                              Add role
+                              Add
                             </button>
-                            {(item.roles || []).length > 0 && (
-                              <div className="sd-chip-row">
-                                {item.roles.map((role) => (
-                                  <button
-                                    type="button"
-                                    key={role}
-                                    className="sd-btn sd-btn-outline"
-                                    disabled={isActionLoading}
-                                    onClick={() => removeRole(item.id, role)}
-                                    title={`Remove ${role}`}
-                                  >
-                                    Remove {role}
-                                  </button>
-                                ))}
-                              </div>
-                            )}
                           </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  {filteredUsers.length === 0 && (
-                    <tr>
-                      <td colSpan="7">
-                        <div className="ac-empty">
-                          <strong>No users found</strong>
-                          Try a different name, email, role, or status.
+                          {(item.roles || []).length > 0 && (
+                            <div className="sd-chip-row ac-wrap">
+                              {item.roles.map((role) => (
+                                <button
+                                  type="button"
+                                  key={role}
+                                  className="sd-btn sd-btn-outline"
+                                  disabled={isActionLoading}
+                                  onClick={() => removeRole(item.id, role)}
+                                  title={`Remove ${role}`}
+                                >
+                                  Remove {role}
+                                </button>
+                              ))}
+                            </div>
+                          )}
                         </div>
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+
+                        <div className="ac-user-field">
+                          {item.accountStatus === 'SUSPENDED' ? (
+                            <button
+                              type="button"
+                              className="sd-btn sd-btn-primary"
+                              disabled={isActionLoading}
+                              onClick={() => setAccountStatus(item.id, 'ACTIVE')}
+                            >
+                              {isActionLoading ? 'Working…' : 'Activate account'}
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className="sd-btn sd-btn-outline"
+                              disabled={isActionLoading}
+                              onClick={() => setAccountStatus(item.id, 'SUSPENDED')}
+                            >
+                              {isActionLoading ? 'Working…' : 'Suspend account'}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </details>
+                  </li>
+                );
+              })}
+              {filteredUsers.length === 0 && (
+                <li>
+                  <div className="ac-empty">
+                    <strong>No users found</strong>
+                    Try a different name, email, role, or status.
+                  </div>
+                </li>
+              )}
+            </ul>
           </div>
         )}
 
