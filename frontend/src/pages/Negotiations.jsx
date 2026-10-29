@@ -1015,6 +1015,21 @@ export default function Negotiations() {
     typeFilter === 'all' || g.type === typeFilter
   );
 
+  // Live counts for the filter buttons (bilateral rows + competition groups).
+  const isActiveStatus = (st) => ['PENDING', 'SELECTED', 'COUNTERED', 'PROVISIONAL'].includes(st);
+  const countFor = (statusId, typeId) =>
+    items.filter((i) =>
+      (statusId === 'all' || isActiveStatus(i.status)) && (typeId === 'all' || i.type === typeId),
+    ).length +
+    compGroups.filter((g) => typeId === 'all' || g.type === typeId).length;
+  const statusCounts = { active: countFor('active', typeFilter), all: countFor('all', typeFilter) };
+  const typeCounts = {
+    all: countFor(filter, 'all'),
+    LISTING_OFFER: countFor(filter, 'LISTING_OFFER'),
+    TRANSPORT_QUOTE: countFor(filter, 'TRANSPORT_QUOTE'),
+    INSPECTION_QUOTE: countFor(filter, 'INSPECTION_QUOTE'),
+  };
+
   const hasAnything = visibleGroups.length > 0 || visible.length > 0;
   const unreadNotices = notices.filter((n) => !n.readAt);
 
@@ -1029,16 +1044,27 @@ export default function Negotiations() {
 
         <FilterFab
           label="Filter negotiations"
-          groups={[
-            { title: 'Status', icon: 'status', value: filter, defaultValue: 'active', onChange: setFilter,
-              options: [{ id: 'active', label: 'Active' }, { id: 'all', label: 'All' }] },
-            { title: 'Type', icon: 'type', value: typeFilter, defaultValue: 'all', onChange: setTypeFilter,
-              options: [
-                { id: 'all',              label: 'All types'      },
-                { id: 'LISTING_OFFER',    label: 'Listing offers' },
-                { id: 'TRANSPORT_QUOTE',  label: 'Transport'      },
-                { id: 'INSPECTION_QUOTE', label: 'Inspection'     },
-              ] },
+          choices={[
+            {
+              items: [
+                { id: 'active', label: 'Active', icon: 'clock', count: statusCounts.active },
+                { id: 'all',    label: 'All',    icon: 'list',  count: statusCounts.all },
+              ],
+              value: filter,
+              defaultValue: 'active',
+              onChange: setFilter,
+            },
+            {
+              items: [
+                { id: 'all',              label: 'All types',      icon: 'list',    count: typeCounts.all },
+                { id: 'LISTING_OFFER',    label: 'Listing offers', icon: 'tag',     count: typeCounts.LISTING_OFFER },
+                { id: 'TRANSPORT_QUOTE',  label: 'Transport',      icon: 'truck',   count: typeCounts.TRANSPORT_QUOTE },
+                { id: 'INSPECTION_QUOTE', label: 'Inspection',     icon: 'status',  count: typeCounts.INSPECTION_QUOTE },
+              ],
+              value: typeFilter,
+              defaultValue: 'all',
+              onChange: setTypeFilter,
+            },
           ]}
         />
 
