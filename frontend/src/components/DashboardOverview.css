@@ -33,6 +33,8 @@
   box-sizing: border-box;
 }
 .dov-card h2 { margin: 0; font-size: 18px; font-weight: 700; }
+/* Pages with a dark theme set a light heading color; these cards are light, so the color is set here. */
+.dash-overview .dov-card h2 { color: var(--ov-ink); }
 .dov-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .dov-link { font-size: 14px; font-weight: 600; color: var(--ov-accent); text-decoration: none; min-height: 44px; display: inline-flex; align-items: center; }
 .dov-link:hover { text-decoration: underline; }

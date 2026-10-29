@@ -8,6 +8,8 @@ import './AdminOverview.css';
 // /admin/operations/summary (ordersByStatus, week).
 
 const money = (v) => `${Number(v || 0).toLocaleString()} ETB`;
+const wholeMoney = (v) => `${Math.round(Number(v || 0)).toLocaleString()} ETB`;      // big numbers: no cents, so they never wrap
+const count = (v) => Number(v || 0).toLocaleString();
 const dayLabel = (iso) => new Date(`${iso}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short' });
 const dayNumber = (iso) => Number(String(iso).slice(8, 10));
 
@@ -33,17 +35,23 @@ export default function AdminOverview({ overview, commission, operations, queues
         <div className="dov-stats">
           <article className="dov-card dov-stat is-accent">
             <span className="dov-label">Paid volume</span>
-            <span className="dov-big">{money(overview?.totalPaidVolume)}</span>
+            <span className="dov-big">{wholeMoney(overview?.totalPaidVolume)}</span>
             <span className="dov-note">Commission {money(commission?.totalCommission)}</span>
           </article>
           <article className="dov-card dov-stat">
             <span className="dov-label">Users</span>
-            <span className="dov-big">{Number(overview?.users || 0).toLocaleString()}</span>
-            <span className="dov-note">{Number(overview?.suspendedUsers || 0)} suspended</span>
+            <span className="dov-big">{count(overview?.users)}</span>
+            <span className="dov-note">{count(overview?.suspendedUsers)} suspended</span>
           </article>
           <article className="dov-card dov-stat">
-            <span className="dov-label">Orders in progress</span>
-            <span className="dov-big">{moving}</span>
+            <span className="dov-label">Listings</span>
+            <span className="dov-big">{count(overview?.listings)}</span>
+            <span className="dov-note">{count(overview?.activeAds)} active ad{Number(overview?.activeAds) === 1 ? '' : 's'}</span>
+          </article>
+          <article className="dov-card dov-stat">
+            <span className="dov-label">Orders</span>
+            <span className="dov-big">{count(overview?.orders)}</span>
+            <span className="dov-note">{moving} in progress</span>
             <span className="dov-bars" aria-hidden="true">
               {stages.slice(0, 4).map((s) => (
                 <span key={s.key} className={`dov-bar dov-tone-${s.tone}`} style={{ height: `${Math.max(12, (s.count / peak) * 100)}%` }} />
