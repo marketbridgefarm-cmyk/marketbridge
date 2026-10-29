@@ -186,6 +186,20 @@ export default function AdminDashboard() {
     };
   }, [tabMenuOpen]);
 
+  // Every admin table renders as one card per row; copy each header's text onto its cells as the card label.
+  useEffect(() => {
+    document.querySelectorAll('.admin-control-center table.sd-table--stack').forEach((table) => {
+      const heads = Array.from(table.querySelectorAll('thead th')).map((th) => th.textContent.trim());
+      table.querySelectorAll('tbody tr').forEach((row) => {
+        Array.from(row.children).forEach((cell, i) => {
+          if (!cell.hasAttribute('data-label') && heads[i] !== undefined && !cell.hasAttribute('colspan')) {
+            cell.setAttribute('data-label', heads[i]);
+          }
+        });
+      });
+    });
+  });
+
   function statusBadgeClass(status) {
     if (
       ['VERIFIED', 'ACTIVE', 'APPROVED', 'PUBLISHED', 'SCHEDULED', 'RESOLVED', 'COMPLETED'].includes(status)
@@ -1363,7 +1377,7 @@ export default function AdminDashboard() {
               <div className="ac-empty">No workflow recovery requests are waiting for approval.</div>
             ) : (
               <div className="ac-table-shell">
-                <table className="ac-table">
+                <table className="ac-table sd-table--stack">
                   <thead>
                     <tr>
                       <th>Type</th>
@@ -1434,7 +1448,7 @@ export default function AdminDashboard() {
               <div className="ac-empty">No release limit reviews are waiting.</div>
             ) : (
               <div className="ac-table-shell">
-                <table className="ac-table">
+                <table className="ac-table sd-table--stack">
                   <thead>
                     <tr>
                       <th>Type</th>
@@ -1487,7 +1501,7 @@ export default function AdminDashboard() {
               <div className="ac-empty">No provider has repeatedly cancelled recently.</div>
             ) : (
               <div className="ac-table-shell">
-                <table className="ac-table">
+                <table className="ac-table sd-table--stack">
                   <thead>
                     <tr>
                       <th>Provider</th>
@@ -1529,7 +1543,7 @@ export default function AdminDashboard() {
               <div className="ac-empty">No provider is suspended or on probation.</div>
             ) : (
               <div className="ac-table-shell">
-                <table className="ac-table">
+                <table className="ac-table sd-table--stack">
                   <thead>
                     <tr>
                       <th>Provider</th>
