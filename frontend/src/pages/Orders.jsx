@@ -461,7 +461,8 @@ export default function Orders() {
             <FilterFab
               label="Filter orders"
               groups={[{
-                title: 'Show',
+                title: 'Orders',
+                icon: 'show',
                 value: tab,
                 defaultValue: 'all',
                 onChange: setTab,

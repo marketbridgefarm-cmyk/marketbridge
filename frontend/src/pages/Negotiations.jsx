@@ -1030,9 +1030,9 @@ export default function Negotiations() {
         <FilterFab
           label="Filter negotiations"
           groups={[
-            { title: 'Status', value: filter, defaultValue: 'active', onChange: setFilter,
+            { title: 'Status', icon: 'status', value: filter, defaultValue: 'active', onChange: setFilter,
               options: [{ id: 'active', label: 'Active' }, { id: 'all', label: 'All' }] },
-            { title: 'Type', value: typeFilter, defaultValue: 'all', onChange: setTypeFilter,
+            { title: 'Type', icon: 'type', value: typeFilter, defaultValue: 'all', onChange: setTypeFilter,
               options: [
                 { id: 'all',              label: 'All types'      },
                 { id: 'LISTING_OFFER',    label: 'Listing offers' },

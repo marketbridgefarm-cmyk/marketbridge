@@ -1017,7 +1017,8 @@ export default function Dashboard() {
                   <FilterFab
                     label="Filter orders"
                     groups={[{
-                      title: 'Show',
+                      title: 'Orders',
+                      icon: 'show',
                       value: orderFilter,
                       defaultValue: 'all',
                       onChange: setOrderFilter,

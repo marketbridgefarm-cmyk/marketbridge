@@ -167,6 +167,19 @@ export default function Listings({ category = 'AGRICULTURAL' }) {
     setShowMore(false);
   }
 
+  const listingsFilterActions = (
+    <div className="mb-fab-actions">
+      <button type="button" className="mb-fab-btn" onClick={() => fetchListings()}>
+        Apply filters
+      </button>
+      {hasActiveFilters && (
+        <button type="button" className="mb-fab-btn mb-fab-btn--ghost" onClick={clearFilters}>
+          Clear all
+        </button>
+      )}
+    </div>
+  );
+
   return (
     <main className="section listings-page">
       <div className="container-wide">
@@ -207,94 +220,106 @@ export default function Listings({ category = 'AGRICULTURAL' }) {
 
         <FilterFab
           label="Filters"
-          extraBadge={
-            [filters.location, filters.region, filters.minQuantity, filters.minPrice,
-              filters.maxPrice, filters.readyAfter, filters.readyBy].filter(Boolean).length +
-            (nearMode ? 1 : 0)
-          }
-        >
-          <label className="mb-fab-field">
-            <span>Location</span>
-            <input
-              type="text"
-              value={filters.location}
-              onChange={(e) => handleFilterChange('location', e.target.value)}
-              placeholder="Any"
-            />
-          </label>
-          <label className="mb-fab-field">
-            <span>Region</span>
-            <select
-              value={filters.region}
-              onChange={(e) => handleFilterChange('region', e.target.value)}
-            >
-              <option value="">Any region</option>
-              {regions.map((r) => (
-                <option key={r.value} value={r.value}>{r.label}</option>
-              ))}
-            </select>
-          </label>
-          <label className="mb-fab-field">
-            <span>Min quantity</span>
-            <input
-              type="number"
-              value={filters.minQuantity}
-              onChange={(e) => handleFilterChange('minQuantity', e.target.value)}
-              placeholder="Any"
-            />
-          </label>
-          <label className="mb-fab-field">
-            <span>Min price (ETB)</span>
-            <input
-              type="number" min="0"
-              value={filters.minPrice}
-              onChange={(e) => handleFilterChange('minPrice', e.target.value)}
-              placeholder="Any"
-            />
-          </label>
-          <label className="mb-fab-field">
-            <span>Max price (ETB)</span>
-            <input
-              type="number" min="0"
-              value={filters.maxPrice}
-              onChange={(e) => handleFilterChange('maxPrice', e.target.value)}
-              placeholder="Any"
-            />
-          </label>
-          {agriculture && (
-            <>
-              <label className="mb-fab-field">
-                <span>Ready after</span>
-                <input
-                  type="date"
-                  value={filters.readyAfter}
-                  onChange={(e) => handleFilterChange('readyAfter', e.target.value)}
-                />
-              </label>
-              <label className="mb-fab-field">
-                <span>Ready by</span>
-                <input
-                  type="date"
-                  value={filters.readyBy}
-                  onChange={(e) => handleFilterChange('readyBy', e.target.value)}
-                />
-              </label>
-            </>
-          )}
-          <div className="mb-fab-actions">
-            <button type="button" className={`mb-fab-btn mb-fab-btn--ghost${nearMode ? ' active' : ''}`} onClick={findNearMe}>
-              Near me
-            </button>
-            <button type="button" className="mb-fab-btn" onClick={() => fetchListings()}>
-              Apply filters
-            </button>
-            {hasActiveFilters && (
-              <button type="button" className="mb-fab-btn mb-fab-btn--ghost" onClick={clearFilters}>
-                Clear all
-              </button>
-            )}
-          </div>
-        </FilterFab>
+          sections={[
+            {
+              title: 'Location',
+              icon: 'location',
+              active: Boolean(filters.location || filters.region || nearMode),
+              children: (
+                <>
+                  <label className="mb-fab-field">
+                    <span>Location</span>
+                    <input
+                      type="text"
+                      value={filters.location}
+                      onChange={(e) => handleFilterChange('location', e.target.value)}
+                      placeholder="Any"
+                    />
+                  </label>
+                  <label className="mb-fab-field">
+                    <span>Region</span>
+                    <select
+                      value={filters.region}
+                      onChange={(e) => handleFilterChange('region', e.target.value)}
+                    >
+                      <option value="">Any region</option>
+                      {regions.map((r) => (
+                        <option key={r.value} value={r.value}>{r.label}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <button type="button" className={`mb-fab-btn mb-fab-btn--ghost${nearMode ? ' active' : ''}`} onClick={findNearMe}>
+                    Near me
+                  </button>
+                </>
+              ),
+              footer: listingsFilterActions,
+            },
+            {
+              title: 'Quantity & price',
+              icon: 'price',
+              active: Boolean(filters.minQuantity || filters.minPrice || filters.maxPrice),
+              children: (
+                <>
+                  <label className="mb-fab-field">
+                    <span>Min quantity</span>
+                    <input
+                      type="number"
+                      value={filters.minQuantity}
+                      onChange={(e) => handleFilterChange('minQuantity', e.target.value)}
+                      placeholder="Any"
+                    />
+                  </label>
+                  <label className="mb-fab-field">
+                    <span>Min price (ETB)</span>
+                    <input
+                      type="number" min="0"
+                      value={filters.minPrice}
+                      onChange={(e) => handleFilterChange('minPrice', e.target.value)}
+                      placeholder="Any"
+                    />
+                  </label>
+                  <label className="mb-fab-field">
+                    <span>Max price (ETB)</span>
+                    <input
+                      type="number" min="0"
+                      value={filters.maxPrice}
+                      onChange={(e) => handleFilterChange('maxPrice', e.target.value)}
+                      placeholder="Any"
+                    />
+                  </label>
+                </>
+              ),
+              footer: listingsFilterActions,
+            },
+            ...(agriculture ? [{
+              title: 'Ready dates',
+              icon: 'calendar',
+              active: Boolean(filters.readyAfter || filters.readyBy),
+              children: (
+                <>
+                  <label className="mb-fab-field">
+                    <span>Ready after</span>
+                    <input
+                      type="date"
+                      value={filters.readyAfter}
+                      onChange={(e) => handleFilterChange('readyAfter', e.target.value)}
+                    />
+                  </label>
+                  <label className="mb-fab-field">
+                    <span>Ready by</span>
+                    <input
+                      type="date"
+                      value={filters.readyBy}
+                      onChange={(e) => handleFilterChange('readyBy', e.target.value)}
+                    />
+                  </label>
+                </>
+              ),
+              footer: listingsFilterActions,
+            }] : []),
+          ]}
+        />
 
         {nearStatus && <p className="ls-muted">{nearStatus}</p>}
         {error && <div className="ls-alert error">{error}</div>}
