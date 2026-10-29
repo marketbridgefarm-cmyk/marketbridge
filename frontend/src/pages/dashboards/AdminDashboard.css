@@ -1892,3 +1892,80 @@
 .sd-dashboard.admin-control-center table.sd-table--stack tbody td .ac-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .sd-dashboard.admin-control-center table.sd-table--stack tbody td .ac-actions .sd-btn,
 .sd-dashboard.admin-control-center table.sd-table--stack tbody td > .sd-btn { flex: 1 1 auto; min-height: 40px; justify-content: center; }
+
+/* ===== Platform card style on the dashboard palette: eyebrow, title rule, ruled labels, no shadows ===== */
+
+.sd-dashboard.admin-control-center table.sd-table--stack tbody tr,
+.sd-dashboard.admin-control-center .ac-user {
+  border: 1.5px solid var(--ac-border) !important;
+  border-radius: 20px;
+  padding: 18px 18px 16px !important;
+  box-shadow: none !important;
+  background: var(--ac-surface-soft) !important;
+}
+.sd-dashboard.admin-control-center table.sd-table--stack tbody tr { gap: 16px 18px; }
+.sd-dashboard.admin-control-center .ac-menu-list { box-shadow: none; border-width: 1.5px; }
+
+/* eyebrow: small caps label with a dash, taken from the first column's header */
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td:first-child::before,
+.sd-dashboard.admin-control-center .ac-user-main::before {
+  display: block;
+  margin: 0 0 6px;
+  padding: 0 0 0 22px;
+  border: 0;
+  background: linear-gradient(var(--admin-accent), var(--admin-accent)) left center / 14px 3px no-repeat;
+  color: var(--admin-accent-bright);
+  content: attr(data-label);
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+}
+.sd-dashboard.admin-control-center .ac-user-main::before { content: "User"; }
+
+/* title */
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td:first-child { font-size: 18px; font-weight: 800; letter-spacing: -.01em; color: var(--ac-text); }
+.sd-dashboard.admin-control-center .ac-user-main strong { font-size: 18px; font-weight: 800; letter-spacing: -.01em; }
+
+/* title rule: short accent segment on a thin line */
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td:first-child::after,
+.sd-dashboard.admin-control-center .ac-user-head::after {
+  display: block;
+  height: 3px;
+  margin-top: 12px;
+  border-radius: 2px;
+  background:
+    linear-gradient(var(--admin-accent), var(--admin-accent)) left / 44px 100% no-repeat,
+    linear-gradient(var(--ac-border-strong, var(--ac-border)), var(--ac-border-strong, var(--ac-border)));
+  content: "";
+}
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td:first-child:has(~ td[data-label="Status"])::after { width: calc(200% + 18px); }
+.sd-dashboard.admin-control-center .ac-user-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 0 10px; padding-bottom: 0; border-bottom: 0; }
+.sd-dashboard.admin-control-center .ac-user-head::after { grid-column: 1 / -1; }
+.sd-dashboard.admin-control-center .ac-user { gap: 16px; }
+
+/* field labels: accent colour, ruled underneath */
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td::before,
+.sd-dashboard.admin-control-center .ac-field-label {
+  display: block;
+  margin: 0 0 8px;
+  padding: 0 0 6px;
+  border-bottom: 1px solid var(--ac-border);
+  color: var(--admin-accent-bright);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: none;
+}
+.sd-dashboard.admin-control-center .ac-user-facts dt { color: var(--admin-accent-bright); font-weight: 700; }
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td[data-label=""]::before,
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td[data-label="Action"]::before,
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td[data-label="Actions"]::before,
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td[data-label="Status"]::before,
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td[colspan]::before { content: none; }
+/* the heading cell has no field label of its own */
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td:first-child[data-label=""]::before { content: none; }
+/* action row: ruled off from the fields */
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td[data-label=""],
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td[data-label="Action"],
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td[data-label="Actions"] { border-top: 1.5px solid var(--ac-border) !important; padding-top: 14px !important; }
