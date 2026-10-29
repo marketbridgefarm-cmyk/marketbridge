@@ -2093,3 +2093,10 @@
   font-size: 17px;
   font-weight: 800;
 }
+
+/* User cards: status badge (e.g. ACTIVE) has no background or outline */
+.sd-dashboard.admin-control-center .ac-user-head > .sd-badge {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
