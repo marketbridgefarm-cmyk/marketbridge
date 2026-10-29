@@ -801,3 +801,39 @@
   .admin-control-center.admin-control-center .ac-panel { padding: 18px 0; }
   .dash-overview--admin { padding: 0; }
 }
+
+/* ── Users: one tidy row per person, details open on tap ─────────────── */
+
+.admin-control-center.admin-control-center .ac-user-list { margin: 8px 0 0; padding: 0; list-style: none; border-top: 1px solid var(--ac-border); }
+.admin-control-center.admin-control-center .ac-user-list > li { border-bottom: 1px solid var(--ac-border); min-width: 0; }
+.admin-control-center.admin-control-center .ac-user summary {
+  display: flex;
+  min-height: 56px;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  list-style: none;
+  cursor: pointer;
+}
+.admin-control-center.admin-control-center .ac-user summary::-webkit-details-marker { display: none; }
+.admin-control-center.admin-control-center .ac-user-main { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 2px; }
+.admin-control-center.admin-control-center .ac-user-main strong,
+.admin-control-center.admin-control-center .ac-user-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ac-text); }
+.admin-control-center.admin-control-center .ac-user-sub { font-size: 13px; color: var(--ac-muted); }
+.admin-control-center.admin-control-center .ac-user[open] .ac-menu-chevron { margin: 3px 3px 0 0; transform: rotate(-135deg); }
+.admin-control-center.admin-control-center .ac-user-body { display: grid; gap: 14px; padding: 4px 0 18px; min-width: 0; }
+.admin-control-center.admin-control-center .ac-user-facts { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; margin: 0; font-size: 14px; }
+.admin-control-center.admin-control-center .ac-user-facts dt { color: var(--ac-muted); }
+.admin-control-center.admin-control-center .ac-user-facts dd { margin: 0; color: var(--ac-text); overflow-wrap: anywhere; }
+.admin-control-center.admin-control-center .ac-user-field { display: grid; gap: 6px; min-width: 0; }
+.admin-control-center.admin-control-center .ac-field-label { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ac-muted); }
+.admin-control-center.admin-control-center .ac-wrap { flex-wrap: wrap; }
+.admin-control-center.admin-control-center .ac-role-row { display: flex; gap: 8px; min-width: 0; }
+.admin-control-center.admin-control-center .ac-role-row select { flex: 1; min-width: 0; }
+.admin-control-center.admin-control-center .ac-user-field select { width: 100%; max-width: 100%; }
+.admin-control-center.admin-control-center .ac-user-field > .sd-btn { justify-self: start; }
+
+@media (min-width: 761px) {
+  .admin-control-center.admin-control-center .ac-user-body { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 28px; }
+  .admin-control-center.admin-control-center .ac-user-facts { grid-column: 1 / -1; }
+}
