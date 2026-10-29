@@ -13,6 +13,7 @@ const {
   recordAuditEvent,
 } = require('../utils/audit');
 const { revokeAllSessions } = require('../services/refreshSessionService');
+const { weekWindow, bucketWeek } = require('../utils/adminWeek');
 const { processRefund, verifyAndFinalizeRefund, retryRefund, failRefund } = require('../services/paymentRefundService');
 const { resolveReconciliation } = require('../services/paymentReconciliationService');
 const { markPaidOut } = require('../services/payoutService');
@@ -2621,6 +2622,9 @@ router.get(
         activeOrders,
         activeTransportJobs,
         recentEvents,
+        orderStatusGroups,
+        weekOrders,
+        weekPayments,
       ] = await Promise.all([
         prisma.payment.count({ where: { status: 'PENDING' } }),
         prisma.payment.count({ where: { status: 'RECONCILIATION_REQUIRED' } }),
@@ -2640,13 +2644,24 @@ router.get(
           take: 12,
           select: { id: true, orderId: true, type: true, fromStatus: true, toStatus: true, createdAt: true },
         }),
+        // For the overview cards: every order counted by status (the orders list is paginated, so it cannot be used for this) ...
+        prisma.order.groupBy({ by: ['status'], _count: { _all: true } }),
+        // ... and this week's new orders and paid payments, bucketed by local day below. Payment has no paidAt column, so
+        // updatedAt (the last change of a PAID payment, normally its settlement) stands in for it.
+        prisma.order.findMany({ where: { createdAt: { gte: weekWindow().start } }, select: { createdAt: true }, take: 20000 }),
+        prisma.payment.findMany({ where: { status: 'PAID', updatedAt: { gte: weekWindow().start } }, select: { updatedAt: true, amount: true }, take: 20000 }),
       ]);
+
+      const ordersByStatus = {};
+      for (const g of orderStatusGroups) ordersByStatus[g.status] = g._count._all;
 
       return res.json({
         queues: { pendingPayments, reconciliationPayments, openDisputes },
         activeOrders,
         activeTransportJobs,
         recentEvents,
+        ordersByStatus,
+        week: bucketWeek({ orders: weekOrders, payments: weekPayments }),
       });
     } catch (error) {
       req.log.error({ err: error }, 'ADMIN OPERATIONS SUMMARY ERROR:');
