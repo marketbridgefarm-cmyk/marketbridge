@@ -904,13 +904,13 @@ export default function AdminDashboard() {
                       <header className="ac-user-head">
                         <span className="ac-user-main">
                           <strong>{item.name}</strong>
-                          <span className="ac-user-sub">{item.email || '—'}</span>
                         </span>
                         <span className={statusBadgeClass(status)}>{status}</span>
                       </header>
 
                       <div className="ac-user-body">
                         <dl className="ac-user-facts">
+                          <dt>Email</dt><dd>{item.email || '—'}</dd>
                           {item.phone && (<><dt>Phone</dt><dd>{item.phone}</dd></>)}
                           {item.location && (<><dt>Location</dt><dd>{item.location}</dd></>)}
                           <dt>Rating</dt><dd>{Number(item.rating || 0).toFixed(1)}</dd>
