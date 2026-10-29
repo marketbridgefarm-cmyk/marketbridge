@@ -811,16 +811,28 @@ export default function AdminDashboard() {
         <div className="ac-tabs-shell" ref={tabsNavRef}>
           <button
             type="button"
-            className={`ac-menu-trigger ${tabMenuOpen ? 'open' : ''}`}
+            className={`ac-menu-trigger ac-fab ${tabMenuOpen ? 'open' : ''}`}
             aria-haspopup="listbox"
             aria-expanded={tabMenuOpen}
+            aria-label={`Admin sections, current: ${activeTabItem.label}`}
+            title={activeTabItem.label}
             onClick={() => setTabMenuOpen((open) => !open)}
           >
-            <span className="ac-menu-label">{activeTabItem.label}</span>
-            {totalTabAlerts > 0 && !tabMenuOpen && (
-              <span className="ac-tab-count" title="Items needing attention">{totalTabAlerts}</span>
+            {tabMenuOpen ? (
+              <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                <path d="M6 6l12 12M18 6L6 18" />
+              </svg>
+            ) : (
+              <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                <rect x="4" y="4" width="6.5" height="6.5" rx="1.5" />
+                <rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5" />
+                <rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5" />
+                <rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5" />
+              </svg>
             )}
-            <span className="ac-menu-chevron" aria-hidden="true" />
+            {totalTabAlerts > 0 && !tabMenuOpen && (
+              <span className="ac-fab-badge" title="Items needing attention">{totalTabAlerts}</span>
+            )}
           </button>
           {tabMenuOpen && (
             <ul className="ac-menu-list" role="listbox" aria-label="Admin sections">
