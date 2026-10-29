@@ -11,9 +11,12 @@ import './FilterFab.css';
  *              options: [{ id, label }] }]  (badge dot when value !== defaultValue)
  *  - sections: custom filters with their own controls.
  *              [{ key?, title, icon?, active?: boolean, children, footer? }]
- *  - choices:  a single-select list shown directly as separate buttons stacked upward
- *              (no sub-menu): { items: [{ id, label, icon?, count? }], value, defaultValue, onChange }
- *              Tapping one applies it and closes the menu.
+ *  - choices:  single-select lists shown directly as separate buttons stacked upward
+ *              (no sub-menu). One list: { items: [{ id, label, icon?, count? }], value,
+ *              defaultValue, onChange }. Several lists: pass an array of those; the first
+ *              list sits nearest the main button, with a divider between lists.
+ *              With one list, tapping a button applies it and closes the menu; with
+ *              several, the menu stays open so each list can be set.
  *  - label:    accessible name for the main button (default "Filters")
  *  - stacked:  lift the button one slot higher (use when another FAB is on the page)
  *
@@ -90,39 +93,50 @@ export default function FilterFab({
   const isOn = (i) => (i.kind === 'group'
     ? i.value !== (i.defaultValue ?? i.options?.[0]?.id)
     : Boolean(i.active));
-  const choicesOn = choices && choices.value !== (choices.defaultValue ?? choices.items?.[0]?.id);
-  const badge = items.filter(isOn).length + (choicesOn ? 1 : 0);
+  const choiceLists = !choices ? [] : (Array.isArray(choices) ? choices : [choices]);
+  const choicesOn = choiceLists.filter(
+    (l) => l.value !== (l.defaultValue ?? l.items?.[0]?.id),
+  ).length;
+  const badge = items.filter(isOn).length + choicesOn;
   const currentLabel = (i) => i.options?.find((o) => o.id === i.value)?.label;
 
   return (
     <div className={`mb-fab-shell${stacked ? ' mb-fab-shell--stacked' : ''}`} ref={shellRef}>
-      {open && choices && (
+      {open && choiceLists.length > 0 && (
         <ul className="mb-fab-stack mb-fab-stack--up" aria-label={label}>
-          {choices.items.map((c) => {
-            const on = choices.value === c.id;
-            return (
-              <li key={c.id}>
-                <button
-                  type="button"
-                  className={`mb-fab-item${on ? ' selected' : ''}`}
-                  aria-pressed={on}
-                  onClick={() => { choices.onChange(c.id); close(); }}
-                >
-                  <span className="mb-fab-item-label">
-                    <strong>{c.label}</strong>
-                    {c.count !== undefined && <em>{c.count}</em>}
-                  </span>
-                  <span className={`mb-fab-item-icon${on ? ' on' : ''}`}>
-                    <Icon name={c.icon || 'filter'} size={22} />
-                  </span>
-                </button>
-              </li>
-            );
-          })}
+          {choiceLists.map((list, li) => (
+            <React.Fragment key={li}>
+              {li > 0 && <li className="mb-fab-divider" role="separator" aria-hidden="true" />}
+              {list.items.map((c) => {
+                const on = list.value === c.id;
+                return (
+                  <li key={`${li}:${c.id}`}>
+                    <button
+                      type="button"
+                      className={`mb-fab-item${on ? ' selected' : ''}`}
+                      aria-pressed={on}
+                      onClick={() => {
+                        list.onChange(c.id);
+                        if (choiceLists.length === 1) close();
+                      }}
+                    >
+                      <span className="mb-fab-item-label">
+                        <strong>{c.label}</strong>
+                        {c.count !== undefined && <em>{c.count}</em>}
+                      </span>
+                      <span className={`mb-fab-item-icon${on ? ' on' : ''}`}>
+                        <Icon name={c.icon || 'filter'} size={22} />
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </React.Fragment>
+          ))}
         </ul>
       )}
 
-      {open && !choices && !active && (
+      {open && choiceLists.length === 0 && !active && (
         <ul className="mb-fab-stack" aria-label={label}>
           {items.map((i) => (
             <li key={i.key}>
