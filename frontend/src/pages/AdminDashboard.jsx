@@ -1655,7 +1655,7 @@ export default function AdminDashboard() {
                       const cancellable =
                         !['COMPLETED', 'CANCELLED'].includes(o.status) && !transportInMotion;
                       return (
-                        <tr key={o.id}>
+                        <tr key={o.id} data-section="Order details">
                           <td data-label="Listing" data-eyebrow="Order">{o.listing?.title || o.listing?.cropType || '—'}</td>
                           <td data-label="Order"><span className="ac-code">{o.id.slice(0, 8)}</span></td>
                           <td data-label="Buyer">{o.buyer?.name || '—'}</td>
