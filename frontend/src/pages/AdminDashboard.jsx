@@ -27,7 +27,6 @@ export default function AdminDashboard() {
   const [disputedArrivals, setDisputedArrivals] = useState(0);
   const [tabMenuOpen, setTabMenuOpen] = useState(false);
 
-  const performanceModalRef = useRef(null);
   const disputeModalRef = useRef(null);
   const tabsNavRef = useRef(null);
 
@@ -582,18 +581,6 @@ export default function AdminDashboard() {
     });
   }, [users, userSearch]);
 
-  const cards = overview
-    ? [
-        ['Users', overview.users],
-        ['Listings', overview.listings],
-        ['Orders', overview.orders],
-        ['Open disputes', overview.openDisputes],
-        ['Active ads', overview.activeAds],
-        ['Suspended users', overview.suspendedUsers || 0],
-        ['Paid volume', `${Number(overview.totalPaidVolume || 0).toLocaleString()} ETB`],
-      ]
-    : [];
-
   const openDisputes = disputes.filter((d) => d.status === 'OPEN' || d.status === 'UNDER_REVIEW');
   const resolvedDisputes = disputes.filter((d) => d.status !== 'OPEN' && d.status !== 'UNDER_REVIEW');
 
@@ -717,54 +704,11 @@ export default function AdminDashboard() {
             </div>
             <div className="ac-hero-actions">
               <RoleSwitchCTA current="ADMIN" />
-              <button type="button" className="sd-btn sd-btn-primary" onClick={() => performanceModalRef.current?.showModal()}>
-                Performance snapshot
-              </button>
               <Link to="/account/security" className="sd-btn">Account security</Link>
             </div>
           </div>
         </div>
-
-        <div className="ac-metrics">
-          {cards.slice(0, 4).map(([label, value]) => (
-            <div className={`ac-metric ${label === 'Open disputes' ? 'warn' : ''}`} key={label}>
-              <div className="ac-metric-label">
-                <span>{label}</span>
-                <span className="ac-metric-dot" />
-              </div>
-              <strong className="ac-metric-value">{value}</strong>
-            </div>
-          ))}
-          {cards.slice(4).map(([label, value]) => (
-            <div className={`ac-metric ${label === 'Suspended users' ? 'danger' : ''}`} key={label}>
-              <div className="ac-metric-label">
-                <span>{label}</span>
-                <span className="ac-metric-dot" />
-              </div>
-              <strong className="ac-metric-value">{value}</strong>
-            </div>
-          ))}
-        </div>
       </section>
-
-      <dialog ref={performanceModalRef} className="ac-dialog">
-        <div className="ac-modal">
-          <button type="button" className="ac-close" aria-label="Close" onClick={() => performanceModalRef.current?.close()}>×</button>
-          <span className="ac-section-label">MARKETPLACE SNAPSHOT</span>
-          <h2>Marketplace performance</h2>
-          <div className="ac-metrics" style={{ marginTop: 18 }}>
-            {cards.map(([label, value]) => (
-              <div className="ac-metric" key={label}>
-                <div className="ac-metric-label">
-                  <span>{label}</span>
-                  <span className="ac-metric-dot" />
-                </div>
-                <strong className="ac-metric-value">{value}</strong>
-              </div>
-            ))}
-          </div>
-        </div>
-      </dialog>
 
       <dialog ref={disputeModalRef} className="ac-dialog" onClose={() => setDisputeDecision(null)}>
         <div className="ac-modal">
