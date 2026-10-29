@@ -54,8 +54,6 @@
     font-weight: 800;
     color: var(--mb-ink);
   }
-  .mb-topbar-lang { width: auto; flex: 0 0 auto; }
-  .mb-topbar-lang .lang-segmented-btn { min-height: 30px; min-width: 34px; padding: 0 6px; }
   .mb-topbar-bell { flex: 0 0 44px; display: grid; place-items: center; min-height: 44px; }
 
   .mb-bottomnav {
@@ -66,43 +64,50 @@
     z-index: 90;
     display: grid;
     grid-template-columns: repeat(5, 1fr);
-    height: calc(64px + env(safe-area-inset-bottom, 0px));
-    padding: 6px 4px env(safe-area-inset-bottom, 0px);
-    background: rgba(255, 255, 255, .95);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border-top: 1px solid var(--mb-border);
-    box-shadow: 0 -4px 16px rgba(14, 75, 41, .08);
+    height: calc(68px + env(safe-area-inset-bottom, 0px));
+    padding: 8px 6px env(safe-area-inset-bottom, 0px);
+    background: rgba(28, 24, 22, .96);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border-top: 1px solid rgba(255, 255, 255, .08);
+    box-shadow: 0 -6px 20px rgba(0, 0, 0, .28);
   }
   .mb-bottomnav-item {
+    position: relative;
     min-width: 48px;
-    min-height: 48px;
+    min-height: 52px;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 2px;
-    color: var(--mb-text-muted);
+    gap: 3px;
+    color: #a99f98;
     text-decoration: none;
     font-size: 11px;
     font-weight: 600;
+    letter-spacing: .02em;
+    -webkit-tap-highlight-color: transparent;
+    transition: color .2s ease;
   }
   .mb-bottomnav-icon {
-    width: 52px;
-    height: 28px;
+    width: 48px;
+    height: 30px;
     display: grid;
     place-items: center;
-    border-radius: var(--mb-radius-pill);
-    transition: background .2s ease;
+    border-radius: var(--mb-radius-pill, 999px);
+    transition: background .2s ease, transform .2s ease;
   }
-  .mb-bottomnav-icon svg { fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
-  .mb-bottomnav-item.active { color: var(--mb-primary); }
-  .mb-bottomnav-item.active .mb-bottomnav-icon { background: var(--mb-surface-soft); }
+  .mb-bottomnav-icon svg { fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+  .mb-bottomnav-item:active .mb-bottomnav-icon { transform: scale(.92); }
+  .mb-bottomnav-item.active { color: #e58a6a; font-weight: 800; }
+  .mb-bottomnav-item.active .mb-bottomnav-icon { background: rgba(217, 119, 87, .18); }
+  .mb-bottomnav-item.active .mb-bottomnav-icon svg { stroke-width: 2.1; }
+  .mb-bottomnav-label { line-height: 1.1; white-space: nowrap; }
 
   /* Sticky in-page tab strips must sit below the sticky top bar. */
   body.has-sidebar .dashboard-page .sd-tabs-list { top: calc(56px + env(safe-area-inset-top, 0px) + 6px); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .mb-bottomnav-icon { transition: none; }
+  .mb-bottomnav-icon, .mb-bottomnav-item { transition: none; }
 }

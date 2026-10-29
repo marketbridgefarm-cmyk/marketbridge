@@ -1,7 +1,6 @@
 import React from 'react';
 import './MobileNav.css';
 import NavIcon from './NavIcon.jsx';
-import LanguageSwitcher from './LanguageSwitcher.jsx';
 
 // Contextual screen titles for the mobile top app bar (first match wins).
 const TITLES = [
@@ -37,7 +36,6 @@ export default function MobileTopBar({ pathname, menuOpen, onMenu, children }) {
       </button>
       <span className="mb-topbar-mark" aria-hidden="true"><NavIcon name="leaf" size={20} /></span>
       <span className="mb-topbar-title">{titleFor(pathname)}</span>
-      <LanguageSwitcher variant="segmented" className="mb-topbar-lang" />
       <div className="mb-topbar-bell">{children}</div>
     </header>
   );
