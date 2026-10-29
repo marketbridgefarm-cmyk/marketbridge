@@ -5,6 +5,7 @@ import RoleSwitchCTA from '../components/RoleSwitchCTA.jsx';
 import DashboardWelcome from '../components/DashboardWelcome.jsx';
 import ImageCarousel from '../components/ImageCarousel.jsx';
 import AdminInspectionArrivals from '../components/AdminInspectionArrivals.jsx';
+import AdminOverview from '../components/AdminOverview.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import './dashboards/AdminDashboard.css';
 
@@ -623,6 +624,19 @@ export default function AdminDashboard() {
 
   const activeTabItem = tabItems.find((item) => item.key === tab) || tabItems[0];
 
+  // Queues shown in the overview card. Counts reuse the tab badges so the two always agree.
+  const tabCount = (key) => tabItems.find((item) => item.key === key)?.count || 0;
+  const adminQueues = [
+    { key: 'disputes', label: 'Open disputes', count: tabCount('disputes'), tab: 'disputes', tone: 'danger' },
+    { key: 'reconcile', label: 'Payments to reconcile', count: operations?.queues?.reconciliationPayments || 0, tab: 'operations', tone: 'danger' },
+    { key: 'refunds', label: 'Refunds to process', count: tabCount('refunds'), tab: 'refunds', tone: 'wait' },
+    { key: 'ads', label: 'Ads waiting for review', count: tabCount('advertising'), tab: 'advertising', tone: 'wait' },
+    { key: 'verify', label: 'Users awaiting verification', count: users.filter((u) => u.verificationStatus === 'PENDING').length, tab: 'users', tone: 'info' },
+    { key: 'recovery', label: 'Recovery and release reviews', count: tabCount('recovery'), tab: 'recovery', tone: 'info' },
+    { key: 'fraud', label: 'Suspicious accounts', count: tabCount('fraud'), tab: 'fraud', tone: 'accent' },
+    { key: 'arrivals', label: 'Inspector arrival disputes', count: tabCount('arrivals'), tab: 'arrivals', tone: 'accent' },
+  ];
+
   if (loading && !overview) {
     return (
       <div className="sd-dashboard admin-control-center">
@@ -860,6 +874,16 @@ export default function AdminDashboard() {
             ))}
           </div>
         </div>
+
+        {tab === 'overview' && (
+          <AdminOverview
+            overview={overview}
+            commission={commissionSummary}
+            operations={operations}
+            queues={adminQueues}
+            onOpenTab={(key) => { clearMessages(); setTab(key); setTabMenuOpen(false); }}
+          />
+        )}
 
         {tab === 'overview' && (
           <div className="ac-panel">
