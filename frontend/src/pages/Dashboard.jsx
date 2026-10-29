@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext.jsx';
 import DashboardWelcome from '../components/DashboardWelcome.jsx';
+import DashboardOverview from '../components/DashboardOverview.jsx';
 import RecentActivity from '../components/RecentActivity.jsx';
 import MessageThread from '../components/MessageThread.jsx';
 import { InspectionRequestSummary, TransportRequestSummary } from '../components/RequestScopeSummary.jsx';
@@ -579,6 +580,21 @@ export default function Dashboard() {
             emptyText="No activity yet — browse listings or create one to get started."
           />
         </DashboardWelcome>
+
+        <DashboardOverview
+          mode={myListings.length > 0 || sellerOrders.length > 0 ? 'seller' : 'buyer'}
+          orders={ordersTagged}
+          myTurnOffers={myTurnOffers}
+          listingLabel={listingLabel}
+          stats={{
+            grossSales,
+            confirmedCount: confirmedSales.length,
+            activeListings,
+            listingCount: myListings.length,
+            offersSent: offersSent.length,
+            buyerOrders: buyerOrdersCount,
+          }}
+        />
 
         <section className="service-access" aria-labelledby="service-access-title">
           <div className="service-access-header">
