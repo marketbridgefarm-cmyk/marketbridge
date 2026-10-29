@@ -92,6 +92,7 @@ export default function AdminInspectionArrivals({ onCount }) {
         stacked
         groups={[{
           title: 'Status',
+          icon: 'status',
           value: status,
           defaultValue: 'DISPUTED',
           onChange: setStatus,
