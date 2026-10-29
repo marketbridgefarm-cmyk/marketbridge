@@ -27,6 +27,7 @@ import RatingBox from '../components/RatingBox.jsx';
 import EvidenceGallery from '../components/EvidenceGallery.jsx';
 import EvidenceUploader from '../components/EvidenceUploader.jsx';
 import ActionCenter from '../components/ActionCenter.jsx';
+import FilterFab from '../components/FilterFab.jsx';
 
 import OrderTimeline from '../components/OrderTimeline.jsx';
 import PaymentCenter from '../components/PaymentCenter.jsx';
@@ -403,6 +404,7 @@ export default function OrderDetail() {
   const [workflow, setWorkflow] = useState(null);
   const [recoveryRequests, setRecoveryRequests] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [activeSection, setActiveSection] = useState('top');
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState('');
@@ -1271,8 +1273,36 @@ export default function OrderDetail() {
     submit: submitDispute,
   };
 
+  // Jump-to-section buttons: only sections that are actually on the page.
+  const sectionChoices = [
+    { id: 'top', label: 'Overview', icon: 'home' },
+    (workflow || isBuyer || isInspector) && { id: 'next-action', label: 'Next step', icon: 'next' },
+    (inspectionApplies && isParticipant && orderOpen) && { id: 'inspection-section', label: 'Inspection', icon: 'status' },
+    { id: 'transport-section', label: 'Transport', icon: 'truck' },
+    (!isProduct || order.agreedOfferId) && { id: 'payment-center', label: 'Payment', icon: 'price' },
+    (order.status === 'DELIVERED' && isBuyer) && { id: 'confirm-receipt', label: 'Receipt', icon: 'receipt' },
+    { id: 'order-payout-status', label: 'Payouts', icon: 'package' },
+    workflow && { id: 'order-timeline', label: 'Timeline', icon: 'history' },
+    { id: 'raise-dispute', label: 'Dispute', icon: 'alert' },
+  ].filter(Boolean);
+
+  const jumpToSection = (id) => {
+    setActiveSection(id);
+    if (id === 'top') window.scrollTo({ top: 0, behavior: 'smooth' });
+    else scrollToId(id);
+  };
+
   return (
     <main className="section order-detail-page">
+      <FilterFab
+        label="Jump to section"
+        choices={{
+          items: sectionChoices,
+          value: activeSection,
+          defaultValue: activeSection,
+          onChange: jumpToSection,
+        }}
+      />
       <div className="container-narrow">
         <div className="row-between page-bar">
           <button type="button" className="back-link" onClick={() => navigate(-1)}>← Back</button>
@@ -1407,7 +1437,7 @@ export default function OrderDetail() {
 
           {workflow && (
             <div className="od-span-all">
-              <Card eyebrow="History" title="Order timeline" subtitle="Everything that has happened on this order">
+              <Card id="order-timeline" eyebrow="History" title="Order timeline" subtitle="Everything that has happened on this order">
                 <OrderTimeline steps={workflow.timeline?.steps} events={workflow.timeline?.events} />
               </Card>
             </div>
