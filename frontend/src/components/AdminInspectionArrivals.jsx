@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import api from '../api/client';
 import { ReliabilityBadge } from './InspectionArrivalPanel.jsx';
+import FilterFab from './FilterFab.jsx';
 
 // Admin queue for disputed inspector arrivals. The seller said "the inspector
 // is not here"; the inspector's check-in (GPS + photo) says otherwise. The
@@ -86,13 +87,17 @@ export default function AdminInspectionArrivals({ onCount }) {
         </button>
       </div>
 
-      <div className="ac-filters" role="tablist">
-        {STATUS_FILTERS.map((f) => (
-          <button key={f.value} type="button" className={`ac-tab ${status === f.value ? 'active' : ''}`} onClick={() => setStatus(f.value)}>
-            {f.label}
-          </button>
-        ))}
-      </div>
+      <FilterFab
+        label="Filter arrivals"
+        stacked
+        groups={[{
+          title: 'Status',
+          value: status,
+          defaultValue: 'DISPUTED',
+          onChange: setStatus,
+          options: STATUS_FILTERS.map((f) => ({ id: f.value, label: f.label })),
+        }]}
+      />
 
       {message && <p className="ac-success">{message}</p>}
       {error && <p className="ac-error">{error}</p>}
