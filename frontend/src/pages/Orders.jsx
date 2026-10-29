@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext.jsx';
 import FilterFab from '../components/FilterFab.jsx';
+import { orderStatusChoices, matchesOrderStatus } from '../utils/orderStatusFilters.js';
 import './orders/Orders.css';
 
 const shortId = (id) => (id || '').slice(0, 8).toUpperCase() || '—';
@@ -87,12 +88,6 @@ function statusTone(status) {
   }
   return 'muted';
 }
-
-const TABS = [
-  { id: 'all', label: 'All orders' },
-  { id: 'buying', label: 'Buying' },
-  { id: 'selling', label: 'Selling' },
-];
 
 function summarizePayments(payments, type) {
   const rows = (payments || []).filter((payment) => payment.type === type);
@@ -370,7 +365,7 @@ export default function Orders() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [tab, setTab] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [query, setQuery] = useState('');
 
   useEffect(() => {
@@ -408,10 +403,8 @@ export default function Orders() {
   const filtered = useMemo(() => {
     let rows = orders;
 
-    if (tab === 'buying') {
-      rows = rows.filter((order) => order.buyerId === currentUserId);
-    } else if (tab === 'selling') {
-      rows = rows.filter((order) => order.sellerId === currentUserId);
+    if (statusFilter !== 'all') {
+      rows = rows.filter((order) => matchesOrderStatus(order, statusFilter));
     }
 
     const q = query.trim().toLowerCase();
@@ -433,7 +426,7 @@ export default function Orders() {
     }
 
     return rows;
-  }, [orders, tab, query, currentUserId]);
+  }, [orders, statusFilter, query]);
 
   return (
     <main className="section orders-page">
@@ -460,14 +453,12 @@ export default function Orders() {
           <div className="toolbar">
             <FilterFab
               label="Filter orders"
-              groups={[{
-                title: 'Orders',
-                icon: 'show',
-                value: tab,
+              choices={{
+                items: orderStatusChoices(orders),
+                value: statusFilter,
                 defaultValue: 'all',
-                onChange: setTab,
-                options: TABS.map((t) => ({ id: t.id, label: t.label })),
-              }]}
+                onChange: setStatusFilter,
+              }}
             />
 
             <label className="search">
@@ -522,7 +513,7 @@ export default function Orders() {
             <p>
               {orders.length === 0
                 ? 'Once an offer is accepted or a purchase is completed, it will appear on this page ready for payment, transport, inspection and delivery.'
-                : 'Try a different tab or clear the search to see more results.'}
+                : 'Try a different status or clear the search to see more results.'}
             </p>
           </div>
         ) : (

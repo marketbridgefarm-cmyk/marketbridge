@@ -8,6 +8,7 @@ import DashboardOverview from '../components/DashboardOverview.jsx';
 import RecentActivity from '../components/RecentActivity.jsx';
 import MessageThread from '../components/MessageThread.jsx';
 import FilterFab from '../components/FilterFab.jsx';
+import { orderStatusChoices, matchesOrderStatus } from '../utils/orderStatusFilters.js';
 import { InspectionRequestSummary, TransportRequestSummary } from '../components/RequestScopeSummary.jsx';
 import './dashboards/Dashboard.css';
 
@@ -24,12 +25,6 @@ const TABS = [
   { id: 'messages', label: 'Messages' },
   { id: 'payments', label: 'Payments' },
   { id: 'earnings', label: 'Earnings' },
-];
-
-const ORDER_FILTERS = [
-  { id: 'all', label: 'All orders' },
-  { id: 'buying', label: 'Buying' },
-  { id: 'selling', label: 'Selling' },
 ];
 
 const ACTIVE_SALE_STATUSES = ['CONFIRMED', 'TRANSPORT_ARRANGED', 'IN_TRANSIT', 'DELIVERED', 'COMPLETED'];
@@ -445,8 +440,7 @@ export default function Dashboard() {
 
   const filteredOrders = useMemo(() => {
     let rows = ordersTagged;
-    if (orderFilter === 'buying') rows = rows.filter((o) => o.viewerRole === 'BUYER');
-    if (orderFilter === 'selling') rows = rows.filter((o) => o.viewerRole === 'SELLER');
+    if (orderFilter !== 'all') rows = rows.filter((o) => matchesOrderStatus(o, orderFilter));
     const q = orderQuery.trim().toLowerCase();
     if (q) {
       rows = rows.filter((o) => {
@@ -1016,14 +1010,12 @@ export default function Dashboard() {
                 <div className="toolbar">
                   <FilterFab
                     label="Filter orders"
-                    groups={[{
-                      title: 'Orders',
-                      icon: 'show',
+                    choices={{
+                      items: orderStatusChoices(ordersTagged),
                       value: orderFilter,
                       defaultValue: 'all',
                       onChange: setOrderFilter,
-                      options: ORDER_FILTERS.map((f) => ({ id: f.id, label: f.label })),
-                    }]}
+                    }}
                   />
 
                   <label className="search">
