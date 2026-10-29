@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext.jsx';
+import FilterFab from '../components/FilterFab.jsx';
 import './orders/Orders.css';
 
 const shortId = (id) => (id || '').slice(0, 8).toUpperCase() || '—';
@@ -457,18 +458,16 @@ export default function Orders() {
 
         {!loading && !error && orders.length > 0 && authReady && (
           <div className="toolbar">
-            <div className="sd-tabs">
-              {TABS.map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  className={`sd-tab ${tab === t.id ? 'sd-active' : ''}`}
-                  onClick={() => setTab(t.id)}
-                >
-                  {t.label}
-                </button>
-              ))}
-            </div>
+            <FilterFab
+              label="Filter orders"
+              groups={[{
+                title: 'Show',
+                value: tab,
+                defaultValue: 'all',
+                onChange: setTab,
+                options: TABS.map((t) => ({ id: t.id, label: t.label })),
+              }]}
+            />
 
             <label className="search">
               <span className="search-icon" aria-hidden="true">

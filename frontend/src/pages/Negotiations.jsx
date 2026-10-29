@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import AmountPicker from '../components/AmountPicker.jsx';
+import FilterFab from '../components/FilterFab.jsx';
 import { Link } from 'react-router-dom';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -1026,24 +1027,20 @@ export default function Negotiations() {
           Agree on price and terms for listings, transport, and inspections — as either party.
         </p>
 
-        <div className="sd-tabs" style={{ margin: '20px 0 8px' }}>
-          <button type="button" className={`sd-tab${filter === 'active' ? ' sd-active' : ''}`}
-            onClick={() => setFilter('active')}>Active</button>
-          <button type="button" className={`sd-tab${filter === 'all' ? ' sd-active' : ''}`}
-            onClick={() => setFilter('all')}>All</button>
-        </div>
-        <div className="sd-tabs" style={{ margin: '0 0 20px' }}>
-          {[
-            { id: 'all',              label: 'All types'       },
-            { id: 'LISTING_OFFER',    label: 'Listing offers'  },
-            { id: 'TRANSPORT_QUOTE',  label: 'Transport'       },
-            { id: 'INSPECTION_QUOTE', label: 'Inspection'      },
-          ].map(({ id, label }) => (
-            <button key={id} type="button"
-              className={`sd-tab${typeFilter === id ? ' sd-active' : ''}`}
-              onClick={() => setTypeFilter(id)}>{label}</button>
-          ))}
-        </div>
+        <FilterFab
+          label="Filter negotiations"
+          groups={[
+            { title: 'Status', value: filter, defaultValue: 'active', onChange: setFilter,
+              options: [{ id: 'active', label: 'Active' }, { id: 'all', label: 'All' }] },
+            { title: 'Type', value: typeFilter, defaultValue: 'all', onChange: setTypeFilter,
+              options: [
+                { id: 'all',              label: 'All types'      },
+                { id: 'LISTING_OFFER',    label: 'Listing offers' },
+                { id: 'TRANSPORT_QUOTE',  label: 'Transport'      },
+                { id: 'INSPECTION_QUOTE', label: 'Inspection'     },
+              ] },
+          ]}
+        />
 
         {unreadNotices.length > 0 && (
           <section className="card neg-notices" aria-label="Waiting list and order updates">

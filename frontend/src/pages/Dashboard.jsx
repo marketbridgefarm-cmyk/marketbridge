@@ -7,6 +7,7 @@ import DashboardWelcome from '../components/DashboardWelcome.jsx';
 import DashboardOverview from '../components/DashboardOverview.jsx';
 import RecentActivity from '../components/RecentActivity.jsx';
 import MessageThread from '../components/MessageThread.jsx';
+import FilterFab from '../components/FilterFab.jsx';
 import { InspectionRequestSummary, TransportRequestSummary } from '../components/RequestScopeSummary.jsx';
 import './dashboards/Dashboard.css';
 
@@ -1013,20 +1014,16 @@ export default function Dashboard() {
                 </div>
 
                 <div className="toolbar">
-                  <div className="sd-seg" role="tablist" aria-label="Filter orders">
-                    {ORDER_FILTERS.map((f) => (
-                      <button
-                        key={f.id}
-                        type="button"
-                        role="tab"
-                        aria-selected={orderFilter === f.id}
-                        className={`sd-seg-btn${orderFilter === f.id ? ' sd-active' : ''}`}
-                        onClick={() => setOrderFilter(f.id)}
-                      >
-                        {f.label}
-                      </button>
-                    ))}
-                  </div>
+                  <FilterFab
+                    label="Filter orders"
+                    groups={[{
+                      title: 'Show',
+                      value: orderFilter,
+                      defaultValue: 'all',
+                      onChange: setOrderFilter,
+                      options: ORDER_FILTERS.map((f) => ({ id: f.id, label: f.label })),
+                    }]}
+                  />
 
                   <label className="search">
                     <span className="search-icon" aria-hidden="true">
