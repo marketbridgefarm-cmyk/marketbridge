@@ -94,8 +94,8 @@
   box-shadow: 0 6px 16px rgba(0, 0, 0, .3);
   line-height: 1.1;
 }
-.mb-fab-item-label strong { font-size: 14px; font-weight: 800; }
-.mb-fab-item-label em { color: #e58a6a; font-size: 12px; font-style: normal; font-weight: 700; }
+.mb-fab-item-label strong { font-size: 14px; font-weight: 800; white-space: nowrap; }
+.mb-fab-item-label em { color: #e58a6a; font-size: 12px; font-style: normal; font-weight: 700; white-space: nowrap; }
 .mb-fab-item-icon {
   position: relative;
   display: grid;
@@ -204,3 +204,18 @@
 }
 .mb-fab-btn--ghost { background: transparent; color: #e58a6a; }
 .mb-fab-btn.active { background: rgba(217, 119, 87, .2); color: #e58a6a; }
+
+/* Choices: separate buttons listed upward, first choice nearest the main button */
+.mb-fab-stack--up {
+  flex-direction: column-reverse;
+  max-height: calc(100vh - 220px);
+  overflow-y: auto;
+  padding: 4px 4px 4px 0;
+  scrollbar-width: none;
+}
+.mb-fab-stack--up::-webkit-scrollbar { display: none; }
+.mb-fab-item.selected .mb-fab-item-label {
+  border-color: #d97757;
+  background: #2b1f1a;
+}
+.mb-fab-item.selected .mb-fab-item-label strong { color: #e58a6a; }

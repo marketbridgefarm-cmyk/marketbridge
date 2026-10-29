@@ -11,6 +11,9 @@ import './FilterFab.css';
  *              options: [{ id, label }] }]  (badge dot when value !== defaultValue)
  *  - sections: custom filters with their own controls.
  *              [{ key?, title, icon?, active?: boolean, children, footer? }]
+ *  - choices:  a single-select list shown directly as separate buttons stacked upward
+ *              (no sub-menu): { items: [{ id, label, icon?, count? }], value, defaultValue, onChange }
+ *              Tapping one applies it and closes the menu.
  *  - label:    accessible name for the main button (default "Filters")
  *  - stacked:  lift the button one slot higher (use when another FAB is on the page)
  *
@@ -30,6 +33,13 @@ const ICONS = {
   tag:      <><path d="M3 12V4h8l10 10-8 8L3 12Z" /><circle cx="7.5" cy="8.5" r="1.2" /></>,
   close:    <path d="M6 6l12 12M18 6L6 18" />,
   back:     <path d="m15 6-6 6 6 6" />,
+  list:     <><path d="M8 6h12M8 12h12M8 18h12" /><path d="M4 6h.01M4 12h.01M4 18h.01" /></>,
+  clock:    <><circle cx="12" cy="12" r="8.5" /><path d="M12 7.5V12l3 2" /></>,
+  truck:    <><path d="M3 6h11v11H3z" /><path d="M14 10h4l3 3v4h-7z" /><circle cx="7" cy="19" r="1.8" /><circle cx="18" cy="19" r="1.8" /></>,
+  package:  <><path d="M12 3 4 7v10l8 4 8-4V7l-8-4Z" /><path d="m4 7 8 4 8-4M12 11v10" /></>,
+  check:    <><circle cx="12" cy="12" r="8.5" /><path d="m8.5 12.3 2.4 2.4 4.6-5" /></>,
+  alert:    <><path d="M12 3 2.5 20h19L12 3Z" /><path d="M12 10v4.5M12 17.5h.01" /></>,
+  cancel:   <><circle cx="12" cy="12" r="8.5" /><path d="m9 9 6 6M15 9l-6 6" /></>,
 };
 
 function Icon({ name, size = 24 }) {
@@ -44,6 +54,7 @@ function Icon({ name, size = 24 }) {
 export default function FilterFab({
   groups = [],
   sections = [],
+  choices = null,
   label = 'Filters',
   stacked = false,
 }) {
@@ -79,12 +90,39 @@ export default function FilterFab({
   const isOn = (i) => (i.kind === 'group'
     ? i.value !== (i.defaultValue ?? i.options?.[0]?.id)
     : Boolean(i.active));
-  const badge = items.filter(isOn).length;
+  const choicesOn = choices && choices.value !== (choices.defaultValue ?? choices.items?.[0]?.id);
+  const badge = items.filter(isOn).length + (choicesOn ? 1 : 0);
   const currentLabel = (i) => i.options?.find((o) => o.id === i.value)?.label;
 
   return (
     <div className={`mb-fab-shell${stacked ? ' mb-fab-shell--stacked' : ''}`} ref={shellRef}>
-      {open && !active && (
+      {open && choices && (
+        <ul className="mb-fab-stack mb-fab-stack--up" aria-label={label}>
+          {choices.items.map((c) => {
+            const on = choices.value === c.id;
+            return (
+              <li key={c.id}>
+                <button
+                  type="button"
+                  className={`mb-fab-item${on ? ' selected' : ''}`}
+                  aria-pressed={on}
+                  onClick={() => { choices.onChange(c.id); close(); }}
+                >
+                  <span className="mb-fab-item-label">
+                    <strong>{c.label}</strong>
+                    {c.count !== undefined && <em>{c.count}</em>}
+                  </span>
+                  <span className={`mb-fab-item-icon${on ? ' on' : ''}`}>
+                    <Icon name={c.icon || 'filter'} size={22} />
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      {open && !choices && !active && (
         <ul className="mb-fab-stack" aria-label={label}>
           {items.map((i) => (
             <li key={i.key}>
