@@ -1,0 +1,23 @@
+/* AdminOverview: the few rules the shared overview cards (DashboardOverview.css) do not have. */
+
+.dash-overview--admin .dov-note { font-size: 13px; color: var(--ov-muted); }
+
+/* Queue rows are buttons */
+.dash-overview--admin .dov-item--row {
+  width: 100%; flex-direction: row; align-items: center; justify-content: space-between; gap: 12px;
+  border-top: 0; border-right: 0; border-bottom: 0; text-align: left; font: inherit; cursor: pointer;
+}
+.dash-overview--admin .dov-item--row:focus-visible { outline: var(--mb-focus-ring, 3px solid #fed7aa); outline-offset: 2px; }
+.dov-pill { flex: none; min-width: 28px; text-align: center; padding: 2px 10px; border-radius: 999px; background: var(--ov-ink); color: #fff; font-size: 13px; font-weight: 700; }
+
+/* Weekly bars */
+.dov-weekbars { list-style: none; margin: 16px 0 10px; padding: 0; display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; text-align: center; }
+.dov-weekbars li { position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 0; border-radius: 16px; }
+.dov-weekbars .is-today { background: var(--ov-soft); }
+.dov-wb-track { display: flex; align-items: flex-end; width: 100%; max-width: 28px; height: 72px; margin-bottom: 4px; }
+.dov-wb-fill { display: block; width: 100%; border-radius: 8px; background: var(--ov-accent-tint); border: 1.5px solid var(--ov-accent); box-sizing: border-box; }
+.dov-weekbars .is-today .dov-wb-fill { background: var(--ov-accent); }
+.dov-weeksum { margin: 0; }
+.dov-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+@media (max-width: 620px) { .dov-wb-track { height: 56px; } }
