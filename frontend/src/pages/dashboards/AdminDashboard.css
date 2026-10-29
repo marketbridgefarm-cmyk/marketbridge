@@ -1994,3 +1994,102 @@
   border-color: var(--ac-border-strong, var(--ac-border));
   color: var(--ac-text);
 }
+
+/* ===== Platform-style card structure: header → ruled section header → indented fields → outlined action ===== */
+
+.sd-dashboard.admin-control-center table.sd-table--stack tbody tr { gap: 14px 20px; padding: 20px 20px 18px !important; }
+
+/* header */
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td:first-child { order: 0; font-size: 22px; line-height: 1.15; font-weight: 800; letter-spacing: -.02em; }
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td:first-child::after { margin-top: 14px; }
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td[data-label="Status"] { order: 0; font-size: 13px; font-weight: 800; }
+
+/* section header, shown above the fields */
+.sd-dashboard.admin-control-center table.sd-table--stack tbody tr::before {
+  order: 1;
+  grid-column: 1 / -1;
+  margin-top: 4px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid var(--ac-border);
+  color: var(--admin-accent-bright);
+  content: "Details";
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -.01em;
+}
+.sd-dashboard.admin-control-center table.sd-table--stack tbody tr[data-section]::before { content: attr(data-section); }
+.sd-dashboard.admin-control-center table.sd-table--stack tbody tr:has(td[colspan])::before { content: none; }
+
+/* fields: indented, small spaced labels over bold values */
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td:not(:first-child) { order: 2; }
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td:not(:first-child):not([data-label="Status"]):not([data-label=""]):not([data-label="Action"]):not([data-label="Actions"]) {
+  padding-left: 14px !important;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td:not(:first-child)::before {
+  margin: 0 0 6px;
+  padding: 0;
+  border: 0;
+  color: var(--ac-muted);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td[data-label=""]::before,
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td[data-label="Action"]::before,
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td[data-label="Actions"]::before,
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td[data-label="Status"]::before,
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td[colspan]::before { content: none; }
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td .sd-muted,
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td.sd-muted { font-weight: 600; }
+
+/* action row: no rule, large outlined button in the accent colour */
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td[data-label=""],
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td[data-label="Action"],
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td[data-label="Actions"] { order: 3; border-top: 0 !important; padding-top: 6px !important; }
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td .sd-btn-outline {
+  border: 1.5px solid var(--admin-accent);
+  border-radius: 18px;
+  background: transparent;
+  color: var(--admin-accent-bright);
+  min-height: 56px;
+  font-size: 17px;
+}
+.sd-dashboard.admin-control-center table.sd-table--stack tbody td .sd-btn-outline:hover:not(:disabled) { background: rgba(217, 119, 87, .12); }
+
+/* user cards share the structure */
+.sd-dashboard.admin-control-center .ac-user { padding: 20px 20px 18px !important; gap: 14px; }
+.sd-dashboard.admin-control-center .ac-user-main strong { font-size: 22px; letter-spacing: -.02em; }
+.sd-dashboard.admin-control-center .ac-user-body { gap: 16px; }
+.sd-dashboard.admin-control-center .ac-user-body::before {
+  padding-bottom: 10px;
+  border-bottom: 2px solid var(--ac-border);
+  color: var(--admin-accent-bright);
+  content: "Account details";
+  font-size: 18px;
+  font-weight: 800;
+}
+.sd-dashboard.admin-control-center .ac-user-body > * { padding-left: 14px; }
+.sd-dashboard.admin-control-center .ac-user-body::before { padding-left: 0; }
+.sd-dashboard.admin-control-center .ac-field-label {
+  padding: 0;
+  border: 0;
+  color: var(--ac-muted);
+  font-size: 11.5px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+.sd-dashboard.admin-control-center .ac-user-facts dt { color: var(--ac-muted); font-size: 11.5px; letter-spacing: .14em; text-transform: uppercase; align-self: center; }
+.sd-dashboard.admin-control-center .ac-user-facts dd { font-size: 16px; font-weight: 700; }
+.sd-dashboard.admin-control-center .ac-user-field > .sd-btn-outline {
+  min-height: 56px;
+  border: 1.5px solid var(--admin-accent);
+  border-radius: 18px;
+  background: transparent;
+  color: var(--admin-accent-bright);
+  font-size: 17px;
+  font-weight: 800;
+}
