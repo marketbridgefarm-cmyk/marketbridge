@@ -874,15 +874,14 @@ export default function AdminDashboard() {
                 const status = item.accountStatus || 'ACTIVE';
                 return (
                   <li key={item.id}>
-                    <details className="ac-user">
-                      <summary>
+                    <article className="ac-user">
+                      <header className="ac-user-head">
                         <span className="ac-user-main">
                           <strong>{item.name}</strong>
-                          <span className="ac-user-sub">{item.email || item.phone || '—'}</span>
+                          <span className="ac-user-sub">{item.email || '—'}</span>
                         </span>
                         <span className={statusBadgeClass(status)}>{status}</span>
-                        <span className="ac-menu-chevron" aria-hidden="true" />
-                      </summary>
+                      </header>
 
                       <div className="ac-user-body">
                         <dl className="ac-user-facts">
@@ -979,7 +978,7 @@ export default function AdminDashboard() {
                           )}
                         </div>
                       </div>
-                    </details>
+                    </article>
                   </li>
                 );
               })}
