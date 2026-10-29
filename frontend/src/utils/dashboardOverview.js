@@ -20,9 +20,19 @@ export function pipelineCounts(orders) {
   return stages;
 }
 
+// Same stages, from counts the server already grouped by status ({ PENDING_PAYMENT: 3, … }). The admin's orders list is
+// paginated, so counting that list would only cover the newest orders.
+export function pipelineFromCounts(byStatus) {
+  const counts = byStatus || {};
+  return PIPELINE.map((s) => ({ ...s, count: s.statuses.reduce((sum, st) => sum + (Number(counts[st]) || 0), 0) }));
+}
+
 // Orders that are still moving (waiting for payment, being prepared or on the road).
 export function inProgressCount(orders) {
-  return pipelineCounts(orders).filter((s) => ['awaiting', 'preparing', 'transit'].includes(s.key))
+  return movingFrom(pipelineCounts(orders));
+}
+export function movingFrom(stages) {
+  return (stages || []).filter((s) => ['awaiting', 'preparing', 'transit'].includes(s.key))
     .reduce((sum, s) => sum + s.count, 0);
 }
 
