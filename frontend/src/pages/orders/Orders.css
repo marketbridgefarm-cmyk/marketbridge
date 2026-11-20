@@ -157,7 +157,9 @@
 .search {
   position: relative;
   display: block;
-  flex: 1 1 240px;
+  /* In the stacked (column) mobile toolbar a flex-basis acts as HEIGHT: 240px pushed the
+     search icon far below the input. Size only from 720px, where the toolbar is a row. */
+  flex: 0 0 auto;
 }
 
 .search-icon {
