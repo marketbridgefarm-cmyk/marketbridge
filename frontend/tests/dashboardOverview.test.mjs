@@ -55,3 +55,28 @@ assert.equal(movingFrom(grouped), 10);
 assert.deepEqual(pipelineFromCounts(undefined).map((s) => s.count), [0, 0, 0, 0, 0]);
 assert.equal(movingFrom(pipelineFromCounts(null)), 0);
 console.log('ok: admin pipeline from server counts');
+
+// Visibility upgrade: activity dots, week-on-week change, order journey, live order list
+import { dailyActivity, activityChange, orderProgress, liveOrders } from '../src/utils/dashboardOverview.js';
+const t0 = new Date('2026-10-29T12:00:00');
+const dated = [
+  o(1, 'CONFIRMED', { createdAt: '2026-10-29T08:00:00' }), o(2, 'CONFIRMED', { createdAt: '2026-10-29T09:00:00' }),
+  o(3, 'COMPLETED', { createdAt: '2026-10-25T09:00:00' }), o(4, 'COMPLETED', { createdAt: '2026-10-20T09:00:00' }),
+  o(5, 'COMPLETED', { createdAt: '2026-09-01T09:00:00' }),   // older than 30 days: not charted
+  o(6, 'COMPLETED', {}),                                     // no date: ignored
+];
+const dots = dailyActivity(dated, t0, 30);
+assert.equal(dots.length, 30);
+assert.equal(dots.at(-1).isToday, true);
+assert.equal(dots.at(-1).count, 2);
+assert.equal(dots.reduce((s, d) => s + d.count, 0), 4);
+const chg = activityChange(dated, t0, 7);
+assert.deepEqual([chg.recent, chg.before, chg.percent], [3, 1, 200]);
+assert.equal(activityChange([], t0).percent, null);
+assert.deepEqual(orderProgress(o(1, 'IN_TRANSIT')), { label: 'On the road', tone: 'accent', step: 4, total: 6 });
+assert.equal(orderProgress(o(1, 'CANCELLED')), null);
+assert.equal(orderProgress(o(1, 'DISPUTED')).step, 0);
+const live = liveOrders([o(1, 'COMPLETED'), o(2, 'CANCELLED'), o(3, 'IN_TRANSIT'), o(4, 'PENDING_PAYMENT')], 5);
+assert.deepEqual(live.map((x) => x.id), [3, 4, 1]);
+assert.equal(attentionItems({ orders: [o(1, 'PENDING_PAYMENT', { viewerRole: 'BUYER' })], myTurnOffers: [], listingLabel: label, money }).items[0].cta, 'Pay now');
+console.log('ok: visibility helpers');
