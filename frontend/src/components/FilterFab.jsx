@@ -64,10 +64,10 @@ export default function FilterFab({
   choices = null,
   label = 'Filters',
   stacked = false,
-  mobileInline = false,
 }) {
   const [open, setOpen] = useState(false);
   const [activeKey, setActiveKey] = useState(null);
+  const [tucked, setTucked] = useState(false);   // slides aside while scrolling down so it never covers text
   const shellRef = useRef(null);
 
   const items = [
@@ -77,6 +77,18 @@ export default function FilterFab({
   const active = items.find((i) => i.key === activeKey) || null;
 
   const close = () => { setOpen(false); setActiveKey(null); };
+
+  useEffect(() => {
+    let last = window.scrollY;
+    const onScroll = () => {
+      const y = window.scrollY;
+      if (Math.abs(y - last) < 8) return;          // ignore jitter
+      setTucked(y > last && y > 120);              // down = tuck away, up (or near top) = show
+      last = y;
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -106,10 +118,7 @@ export default function FilterFab({
   const currentLabel = (i) => i.options?.find((o) => o.id === i.value)?.label;
 
   return (
-    <div
-      className={`mb-fab-shell${stacked ? ' mb-fab-shell--stacked' : ''}${mobileInline ? ' mb-fab-shell--mobile-inline' : ''}`}
-      ref={shellRef}
-    >
+    <div className={`mb-fab-shell${stacked ? ' mb-fab-shell--stacked' : ''}${tucked && !open ? ' is-tucked' : ''}`} ref={shellRef}>
       {open && choiceLists.length > 0 && (
         <ul className="mb-fab-stack mb-fab-stack--up" aria-label={label}>
           {choiceLists.map((list, li) => (
