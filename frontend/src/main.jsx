@@ -23,6 +23,9 @@ import './pages/order-details/OrderDetail.css';
 // it is the final word on cards (it also out-ranks page rules via #root).
 import './mb-cards.css';
 
+// Shared responsive fixes (tables, touch targets, safe areas). Keep AFTER mb-cards.css.
+import './mb-responsive.css';
+
 // ============================================================================
 // Global Chunk Load Error Handler
 // ----------------------------------------------------------------------------

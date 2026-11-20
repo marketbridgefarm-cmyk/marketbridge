@@ -1,0 +1,90 @@
+/* ==========================================================================
+   MarketBridge — shared responsive layer (mb-responsive.css)
+   Loaded LAST (after mb-cards.css). Every rule here fixes a problem measured
+   in a real browser at 320 / 360 / 390 / 768 / 1280 px, or hardens a pattern
+   that causes the same class of problem on other pages.
+   Rules use #root so they out-rank page sheets without !important.
+   ========================================================================== */
+
+/* 1. Media can never be wider than the card or column holding it. */
+#root img,
+#root video,
+#root canvas { max-width: 100%; }
+
+/* 2. Long titles, names and ids wrap inside their card instead of stretching it. */
+#root :where(.lc-title, .lc-location, .od-card-title, .card h2, .card h3, .detail-content h1, .dov-order-title) {
+  overflow-wrap: anywhere;
+}
+#root :where(.container-wide, .container-narrow, .section) { min-width: 0; }
+
+/* 3. Respect the phone notch / home bar in landscape and on edge-to-edge screens. */
+#root :where(.container-wide, .container-narrow) {
+  padding-left:  max(var(--mb-page-pad, 14px), env(safe-area-inset-left));
+  padding-right: max(var(--mb-page-pad, 14px), env(safe-area-inset-right));
+}
+@media (min-width: 421px) { #root :where(.container-wide, .container-narrow) { --mb-page-pad: 20px; } }
+@media (min-width: 761px) { #root :where(.container-wide, .container-narrow) { --mb-page-pad: 24px; } }
+
+/* 4. Order page — payout / refund tables.
+      mb-cards.css indents the table with margin-inline-start but kept width:auto,
+      so the table was always (indent) wider than its card — at every screen size.
+      Fit it to what is left, and let it scroll sideways on narrow screens. */
+#root .od-card-section > .payout-table {
+  width: calc(100% - clamp(16px, 13cqw, 48px));
+}
+@media (max-width: 640px) {
+  #root .od-card-section > .payout-table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  #root .od-card-section > .payout-table th,
+  #root .od-card-section > .payout-table td { white-space: nowrap; }
+}
+
+/* 5. Listing detail — the photo block took its width from a 220px minimum height
+      (16:10 ratio = 352px), so it overflowed 328px columns on phones. Let the width
+      lead and the height follow. */
+#root .detail-page .detail-media {
+  width: 100%;
+  height: auto;
+  max-height: 390px;
+  aspect-ratio: 16 / 10;
+}
+
+/* 6. Touch targets: at least 44px tall on phones and touch screens. */
+@media (pointer: coarse), (max-width: 760px) {
+  #root .lc-cta { min-height: 44px; padding-inline: 18px; display: inline-flex; align-items: center; justify-content: center; }
+  #root .showcase-more,
+  #root .ad-slot-cta { min-height: 44px; display: inline-flex; align-items: center; }
+  #root .od-next-item-go { min-height: 44px; min-width: 44px; }
+  #root .back-link,
+  #root .btn.btn-sm { min-height: 44px; }
+  /* Text links inside forms / sentences: bigger hit area without moving the text. */
+  #root .auth-section a:not(.btn) { padding-block: 13px; margin-block: -13px; }
+}
+
+/* 7. Listing cards on phones: calmer, denser, easier to scan. */
+@media (max-width: 620px) {
+  #root .lc-offer-count { font-size: 13px; line-height: 1.4; color: var(--mb-muted, #64748b); margin: 2px 0 0; }
+  #root .lc-stats { gap: 10px; }
+}
+@media (max-width: 420px) {
+  #root .lc-photo { aspect-ratio: 16 / 9; min-height: 0; }
+}
+
+/* 8. Keyboard focus is always visible (low specificity: any page style still wins). */
+#root :where(a, button, input, select, textarea, summary):focus-visible {
+  outline: 3px solid var(--mb-accent-border, #fed7aa);
+  outline-offset: 2px;
+}
+
+/* 9. Orders toolbar — see Orders.css (.search flex-basis was acting as a 240px HEIGHT
+      in the stacked mobile layout). Guard against the same pattern elsewhere. */
+#root .toolbar > .search { flex: 0 0 auto; }
+@media (min-width: 720px) { #root .toolbar > .search { flex: 0 1 320px; } }
+
+/* 10. Respect "reduce motion". */
+@media (prefers-reduced-motion: reduce) {
+  #root *, #root *::before, #root *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; }
+}
