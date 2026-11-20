@@ -390,7 +390,7 @@ body.has-sidebar .app-main { margin-left: 80px; }
 @media (max-width: 767px) {
   body.has-sidebar .app-main {
     margin-left: 0;
-    padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));   /* clears the floating nav */
   }
   .glass-sidebar,
   .glass-sidebar.expanded {

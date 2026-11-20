@@ -56,58 +56,111 @@
   }
   .mb-topbar-bell { flex: 0 0 44px; display: grid; place-items: center; min-height: 44px; }
 
+  /* Floating glass navigation: a pill of four tabs (the active one expands to show its label)
+     plus a separate round Account button. Floats above the page instead of docking to the edge. */
   .mb-bottomnav {
     position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 0;
+    left: max(12px, env(safe-area-inset-left, 0px));
+    right: max(12px, env(safe-area-inset-right, 0px));
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
     z-index: 90;
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    height: calc(68px + env(safe-area-inset-bottom, 0px));
-    padding: 8px 6px env(safe-area-inset-bottom, 0px);
-    background: rgba(28, 24, 22, .96);
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
-    border-top: 1px solid rgba(255, 255, 255, .08);
-    box-shadow: 0 -6px 20px rgba(0, 0, 0, .28);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    pointer-events: none;            /* only the pill and the orb take taps; the gaps stay clickable-through */
+  }
+  .mb-bottomnav-pill,
+  .mb-bottomnav-orb {
+    pointer-events: auto;
+    background: rgba(26, 23, 21, .74);
+    backdrop-filter: blur(18px) saturate(1.4);
+    -webkit-backdrop-filter: blur(18px) saturate(1.4);
+    border: 1px solid rgba(255, 255, 255, .16);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, .32), inset 0 1px 0 rgba(255, 255, 255, .08);
+  }
+  .mb-bottomnav-pill {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 58px;
+    padding: 5px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0;
+    border-radius: 999px;
   }
   .mb-bottomnav-item {
     position: relative;
-    min-width: 48px;
-    min-height: 52px;
-    display: flex;
-    flex-direction: column;
+    flex: 0 0 auto;
+    min-width: 44px;
+    height: 48px;
+    padding: 0 10px;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 3px;
-    color: #a99f98;
+    gap: 0;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    color: #b9b0a9;
     text-decoration: none;
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: .02em;
+    font-size: 14px;
+    font-weight: 700;
     -webkit-tap-highlight-color: transparent;
-    transition: color .2s ease;
+    transition: background .25s ease, color .2s ease, padding .25s ease, gap .25s ease;
   }
-  .mb-bottomnav-icon {
-    width: 48px;
-    height: 30px;
+  .mb-bottomnav-icon { display: grid; place-items: center; transition: transform .2s ease; }
+  .mb-bottomnav-icon svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .mb-bottomnav-item:active .mb-bottomnav-icon { transform: scale(.9); }
+  /* Label is collapsed on inactive tabs and slides open on the active one. */
+  .mb-bottomnav-label {
+    max-width: 0;
+    overflow: hidden;
+    opacity: 0;
+    line-height: 1;
+    white-space: nowrap;
+    transition: max-width .25s ease, opacity .2s ease;
+  }
+  .mb-bottomnav-item.active {
+    gap: 8px;
+    padding: 0 14px 0 12px;
+    color: #fff;
+    background: linear-gradient(135deg, rgba(38, 140, 104, .96), rgba(20, 96, 72, .96));
+    border-color: rgba(255, 255, 255, .22);
+    box-shadow: 0 4px 14px rgba(20, 96, 72, .45), inset 0 1px 0 rgba(255, 255, 255, .18);
+  }
+  .mb-bottomnav-item.active .mb-bottomnav-icon svg { stroke-width: 2.1; }
+  .mb-bottomnav-item.active .mb-bottomnav-label { max-width: 76px; opacity: 1; }
+
+  .mb-bottomnav-orb {
+    flex: 0 0 58px;
+    width: 58px;
+    height: 58px;
     display: grid;
     place-items: center;
-    border-radius: var(--mb-radius-pill, 999px);
-    transition: background .2s ease, transform .2s ease;
+    border-radius: 50%;
+    color: #d6cec8;
+    text-decoration: none;
+    -webkit-tap-highlight-color: transparent;
+    transition: background .25s ease, color .2s ease, transform .2s ease;
   }
-  .mb-bottomnav-icon svg { fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
-  .mb-bottomnav-item:active .mb-bottomnav-icon { transform: scale(.92); }
-  .mb-bottomnav-item.active { color: #e58a6a; font-weight: 800; }
-  .mb-bottomnav-item.active .mb-bottomnav-icon { background: rgba(217, 119, 87, .18); }
-  .mb-bottomnav-item.active .mb-bottomnav-icon svg { stroke-width: 2.1; }
-  .mb-bottomnav-label { line-height: 1.1; white-space: nowrap; }
+  .mb-bottomnav-orb svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .mb-bottomnav-orb:active { transform: scale(.94); }
+  .mb-bottomnav-orb.active { color: #fff; background: linear-gradient(135deg, rgba(38, 140, 104, .96), rgba(20, 96, 72, .96)); }
+
+  /* Very narrow phones: tighter pill so four tabs + orb still fit. */
+  @media (max-width: 350px) {
+    .mb-bottomnav { gap: 6px; left: max(8px, env(safe-area-inset-left, 0px)); right: max(8px, env(safe-area-inset-right, 0px)); }
+    .mb-bottomnav-orb { flex-basis: 50px; width: 50px; height: 50px; }
+    .mb-bottomnav-pill { height: 54px; padding: 4px; }
+    .mb-bottomnav-item { height: 44px; min-width: 38px; padding: 0 7px; }
+    .mb-bottomnav-item.active { padding: 0 12px 0 10px; }
+    .mb-bottomnav-item.active .mb-bottomnav-label { max-width: 64px; font-size: 13px; }
+  }
 
   /* Sticky in-page tab strips must sit below the sticky top bar. */
   body.has-sidebar .dashboard-page .sd-tabs-list { top: calc(56px + env(safe-area-inset-top, 0px) + 6px); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .mb-bottomnav-icon, .mb-bottomnav-item { transition: none; }
+  .mb-bottomnav-icon, .mb-bottomnav-item, .mb-bottomnav-label, .mb-bottomnav-orb { transition: none; }
 }
