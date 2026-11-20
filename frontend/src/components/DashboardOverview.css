@@ -40,7 +40,7 @@
 .dov-link:hover { text-decoration: underline; }
 
 /* Stat cards */
-.dov-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--mb-gap, 20px); }
+.dov-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--mb-gap, 20px); }
 .dov-stat { display: flex; flex-direction: column; gap: 6px; min-height: 132px; }
 .dov-stat.is-accent { background: var(--ov-accent-tint); }
 .dov-label { font-size: 13px; color: var(--ov-muted); font-weight: 600; }
@@ -95,3 +95,61 @@
   .dov-stat { min-height: 0; }
   .dov-card { padding: 18px; border-radius: var(--mb-radius-card-sm, 18px); }
 }
+
+/* ============================================================
+   Visibility upgrade — hero number, dot chart, order rows, action buttons
+   ============================================================ */
+.dov-hero { padding: 26px; display: flex; flex-direction: column; gap: 14px; }
+.dov-hero-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+.dov-hero-num { display: block; font-size: clamp(56px, 9vw, 88px); font-weight: 300; letter-spacing: -3px; line-height: 1; margin: 6px 0 8px; color: var(--ov-ink); }
+.dov-hero-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; font-size: 14px; color: var(--ov-muted); }
+.dov-delta { font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 999px; background: var(--mb-ok-bg, #ecfdf5); color: var(--ov-ok); }
+.dov-delta.is-down { background: var(--mb-danger-bg, #fef2f2); color: var(--ov-danger); }
+.dov-hero-legend { display: flex; gap: 14px; font-size: 12px; color: var(--ov-muted); }
+.dov-hero-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.dov-dot-ink { background: var(--ov-ink); display: inline-block; }
+.dov-chart-wrap { position: relative; width: 100%; overflow: hidden; }
+.dov-chart { display: block; width: 100%; height: auto; max-height: 150px; }
+.dov-pt { fill: var(--ov-ink); }
+.dov-base { fill: #cbd5e1; }
+.dov-chart .is-today .dov-pt { fill: var(--ov-accent); }
+.dov-chart .is-today .dov-base { fill: var(--ov-accent); }
+.dov-chart-empty { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; font-size: 14px; color: var(--ov-muted); }
+.dov-hero-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 14px; border-radius: 16px; background: var(--ov-soft); font-size: 14px; }
+.dov-foot-alert b { display: inline-block; min-width: 22px; text-align: center; padding: 1px 7px; margin-right: 4px; border-radius: 999px; background: var(--ov-accent); color: #fff; }
+.dov-foot-ok { color: var(--ov-ok); font-weight: 600; }
+
+.dov-orders { list-style: none; margin: 14px 0 0; padding: 0; display: flex; flex-direction: column; }
+.dov-order { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 16px; min-height: 56px; padding: 12px 6px; border-bottom: 1px solid var(--mb-line-soft, #e2e8f0); color: inherit; text-decoration: none; border-radius: 12px; }
+.dov-orders li:last-child .dov-order { border-bottom: 0; }
+.dov-order:hover { background: var(--ov-soft); }
+.dov-order-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.dov-order-title { font-size: 15px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dov-order-meta { font-size: 12px; color: var(--ov-muted); }
+.dov-steps { display: inline-flex; gap: 3px; }
+.dov-steps i { width: 14px; height: 8px; border-radius: 3px; background: #e2e8f0; }
+.dov-steps i.is-on { background: var(--ov-ink); }
+.dov-steps i.is-on.dov-tone-wait   { background: var(--ov-wait); }
+.dov-steps i.is-on.dov-tone-info   { background: var(--ov-info); }
+.dov-steps i.is-on.dov-tone-accent { background: var(--ov-accent); }
+.dov-steps i.is-on.dov-tone-ok     { background: var(--ov-ok); }
+.dov-steps i.is-on.dov-tone-danger { background: var(--ov-danger); }
+.dov-pill { font-size: 12px; font-weight: 700; padding: 5px 12px; border-radius: 999px; white-space: nowrap; background: var(--ov-soft); color: var(--ov-ink); }
+.dov-pill-wait   { background: #fef3c7; color: #92400e; }
+.dov-pill-info   { background: #dbeafe; color: #1e40af; }
+.dov-pill-accent { background: var(--ov-accent-tint); color: var(--mb-accent-ink, #9a3412); }
+.dov-pill-ok     { background: #d1fae5; color: #065f46; }
+.dov-pill-danger { background: #fee2e2; color: #991b1b; }
+
+/* "Needs your attention" rows now carry a clear action button */
+.dov-item { flex-direction: row; align-items: center; justify-content: space-between; gap: 12px; }
+.dov-cta { flex: none; font-size: 13px; font-weight: 700; padding: 8px 14px; border-radius: 999px; background: var(--ov-ink); color: #fff; min-height: 36px; display: inline-flex; align-items: center; }
+.dov-item:hover .dov-cta { background: var(--ov-accent); }
+
+@media (max-width: 620px) {
+  .dov-hero { padding: 18px; }
+  .dov-order { grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; }
+  .dov-steps { grid-column: 1 / -1; grid-row: 2; }
+  .dov-steps i { flex: 1; width: auto; }
+}
+@media (prefers-reduced-motion: no-preference) { .dov-order, .dov-cta { transition: background .15s ease; } }

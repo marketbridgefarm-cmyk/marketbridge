@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { attentionItems, inProgressCount, pipelineCounts, upcomingDues, weekDays } from '../utils/dashboardOverview.js';
+import { activityChange, attentionItems, dailyActivity, inProgressCount, liveOrders, orderProgress, pipelineCounts, upcomingDues, weekDays } from '../utils/dashboardOverview.js';
 import './DashboardOverview.css';
 
 // Overview cards at the top of the dashboard: key numbers, the order pipeline, this week's payment deadlines and what
@@ -8,6 +8,32 @@ import './DashboardOverview.css';
 
 const money = (v) => `${Number(v || 0).toLocaleString()} ETB`;
 const fmtDue = (d) => new Date(d).toLocaleString(undefined, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+
+// Dot-matrix bar chart: one column per day, one dot per order created that day (max 8 shown).
+const MAX_DOTS = 8;
+function DotChart({ dots }) {
+  const col = 18, r = 5, h = 12 * MAX_DOTS + 8, w = dots.length * col;
+  const total = dots.reduce((sum, d) => sum + d.count, 0);
+  return (
+    <div className="dov-chart-wrap">
+      <svg className="dov-chart" viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="xMinYMax meet" role="img"
+           aria-label={`Orders created per day over the last ${dots.length} days: ${total} in total`}>
+        {dots.map((d, i) => {
+          const cx = i * col + col / 2;
+          const n = Math.min(d.count, MAX_DOTS);
+          return (
+            <g key={d.key} className={d.isToday ? 'is-today' : ''}>
+              <title>{`${d.count} order${d.count === 1 ? '' : 's'} on day ${d.day}`}</title>
+              <circle className="dov-base" cx={cx} cy={h - 6} r={2.4} />
+              {Array.from({ length: n }, (_, k) => <circle key={k} className="dov-pt" cx={cx} cy={h - 6 - 12 * (k + 1)} r={r} />)}
+            </g>
+          );
+        })}
+      </svg>
+      {total === 0 && <p className="dov-chart-empty">Your order activity will appear here.</p>}
+    </div>
+  );
+}
 
 export default function DashboardOverview({ mode, orders, myTurnOffers, listingLabel, stats }) {
   const now = useMemo(() => new Date(), []);
@@ -17,10 +43,13 @@ export default function DashboardOverview({ mode, orders, myTurnOffers, listingL
   const dues = useMemo(() => upcomingDues(orders, now, 3), [orders, now]);
   const attention = useMemo(() => attentionItems({ orders, myTurnOffers, listingLabel, money }), [orders, myTurnOffers, listingLabel]);
 
+  const dots = useMemo(() => dailyActivity(orders, now, 30), [orders, now]);
+  const change = useMemo(() => activityChange(orders, now, 7), [orders, now]);
+  const rows = useMemo(() => liveOrders(orders, 5), [orders]);
+
   const visible = stages.filter((s) => s.key !== 'disputed' || s.count > 0);
   const total = visible.reduce((sum, s) => sum + s.count, 0);
   const summary = visible.map((s) => `${s.count} ${s.label.toLowerCase()}`).join(', ');
-  const peak = Math.max(1, ...stages.map((s) => s.count));
 
   const cards = mode === 'seller'
     ? [
@@ -35,6 +64,33 @@ export default function DashboardOverview({ mode, orders, myTurnOffers, listingL
   return (
     <section className="dash-overview" aria-label="Overview">
       <div className="dov-main">
+        <article className="dov-card dov-hero">
+          <div className="dov-hero-top">
+            <div>
+              <span className="dov-label">Orders in progress</span>
+              <span className="dov-hero-num">{moving}</span>
+              <span className="dov-hero-sub">
+                {change.recent} new order{change.recent === 1 ? '' : 's'} in the last 7 days
+                {change.percent !== null && (
+                  <span className={`dov-delta ${change.percent >= 0 ? 'is-up' : 'is-down'}`}>
+                    {change.percent >= 0 ? '+' : ''}{change.percent}% vs previous week
+                  </span>
+                )}
+              </span>
+            </div>
+            <div className="dov-hero-legend" aria-hidden="true"><span><i className="dov-dot dov-tone-accent" />Today</span><span><i className="dov-dot dov-dot-ink" />Orders created</span></div>
+          </div>
+          <DotChart dots={dots} />
+          <div className="dov-hero-foot">
+            {attention.total > 0 ? (
+              <span className="dov-foot-alert"><b>{attention.total}</b> thing{attention.total === 1 ? '' : 's'} need{attention.total === 1 ? 's' : ''} you today</span>
+            ) : (
+              <span className="dov-foot-ok">All caught up — nothing is waiting on you.</span>
+            )}
+            <Link className="dov-link" to="/orders">Open all orders</Link>
+          </div>
+        </article>
+
         <div className="dov-stats">
           {cards.map((c) => (
             <article key={c.label} className={`dov-card dov-stat${c.tone ? ` is-${c.tone}` : ''}`}>
@@ -43,16 +99,43 @@ export default function DashboardOverview({ mode, orders, myTurnOffers, listingL
               <span className="dov-note">{c.note}</span>
             </article>
           ))}
-          <article className="dov-card dov-stat">
-            <span className="dov-label">Orders in progress</span>
-            <span className="dov-big">{moving}</span>
-            <span className="dov-bars" aria-hidden="true">
-              {stages.slice(0, 4).map((s) => (
-                <span key={s.key} className={`dov-bar dov-tone-${s.tone}`} style={{ height: `${Math.max(12, (s.count / peak) * 100)}%` }} />
-              ))}
-            </span>
-          </article>
         </div>
+
+        <article className="dov-card">
+          <div className="dov-head">
+            <h2>Your orders</h2>
+            <Link className="dov-link" to="/orders">View all</Link>
+          </div>
+          {rows.length === 0 ? (
+            <p className="dov-empty">No orders yet. <Link to="/listings">Browse listings</Link> to start your first deal.</p>
+          ) : (
+            <ul className="dov-orders">
+              {rows.map((o) => {
+                const prog = orderProgress(o);
+                return (
+                  <li key={o.id}>
+                    <Link to={`/orders/${o.id}`} className="dov-order">
+                      <span className="dov-order-main">
+                        <span className="dov-order-title">{listingLabel(o.listing)}</span>
+                        <span className="dov-order-meta">{o.viewerRole === 'BUYER' ? 'You are buying' : 'You are selling'}{o.finalPrice ? ` · ${money(o.finalPrice)}` : ''}</span>
+                      </span>
+                      {prog && (
+                        <>
+                          <span className="dov-steps" role="img" aria-label={`Step ${prog.step} of ${prog.total}`}>
+                            {Array.from({ length: prog.total }, (_, i) => (
+                              <i key={i} className={i < prog.step ? `is-on dov-tone-${prog.tone}` : ''} />
+                            ))}
+                          </span>
+                          <span className={`dov-pill dov-pill-${prog.tone}`}>{prog.label}</span>
+                        </>
+                      )}
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </article>
 
         <article className="dov-card">
           <div className="dov-head">
@@ -120,7 +203,10 @@ export default function DashboardOverview({ mode, orders, myTurnOffers, listingL
             <ul className="dov-list">
               {attention.items.map((it) => (
                 <li key={it.id}>
-                  <Link to={it.href} className={`dov-item dov-tone-${it.tone}`}><span className="dov-item-text">{it.text}</span></Link>
+                  <Link to={it.href} className={`dov-item dov-tone-${it.tone}`}>
+                    <span className="dov-item-text">{it.text}</span>
+                    {it.cta && <span className="dov-cta">{it.cta}</span>}
+                  </Link>
                 </li>
               ))}
             </ul>
