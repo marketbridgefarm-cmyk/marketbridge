@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { activityChange, attentionItems, dailyActivity, inProgressCount, liveOrders, orderProgress, pipelineCounts, upcomingDues, weekDays } from '../utils/dashboardOverview.js';
+import useMediaQuery from './useMediaQuery.js';
 import './DashboardOverview.css';
 
 // Overview cards at the top of the dashboard: key numbers, the order pipeline, this week's payment deadlines and what
@@ -12,7 +13,8 @@ const fmtDue = (d) => new Date(d).toLocaleString(undefined, { weekday: 'short', 
 // Dot-matrix bar chart: one column per day, one dot per order created that day (max 8 shown).
 const MAX_DOTS = 8;
 function DotChart({ dots }) {
-  const col = 18, r = 5, h = 12 * MAX_DOTS + 8, w = dots.length * col;
+  const big = dots.length <= 14;
+  const col = big ? 36 : 18, r = big ? 9 : 5, step = big ? 20 : 12, h = step * MAX_DOTS + 8, w = dots.length * col;
   const total = dots.reduce((sum, d) => sum + d.count, 0);
   return (
     <div className="dov-chart-wrap">
@@ -25,7 +27,7 @@ function DotChart({ dots }) {
             <g key={d.key} className={d.isToday ? 'is-today' : ''}>
               <title>{`${d.count} order${d.count === 1 ? '' : 's'} on day ${d.day}`}</title>
               <circle className="dov-base" cx={cx} cy={h - 6} r={2.4} />
-              {Array.from({ length: n }, (_, k) => <circle key={k} className="dov-pt" cx={cx} cy={h - 6 - 12 * (k + 1)} r={r} />)}
+              {Array.from({ length: n }, (_, k) => <circle key={k} className="dov-pt" cx={cx} cy={h - 6 - step * (k + 1)} r={r} />)}
             </g>
           );
         })}
@@ -43,7 +45,9 @@ export default function DashboardOverview({ mode, orders, myTurnOffers, listingL
   const dues = useMemo(() => upcomingDues(orders, now, 3), [orders, now]);
   const attention = useMemo(() => attentionItems({ orders, myTurnOffers, listingLabel, money }), [orders, myTurnOffers, listingLabel]);
 
-  const dots = useMemo(() => dailyActivity(orders, now, 30), [orders, now]);
+  const narrow = useMediaQuery('(max-width: 520px)');
+  const span = narrow ? 14 : 30;   // fewer, larger dots on phones so the chart stays readable
+  const dots = useMemo(() => dailyActivity(orders, now, span), [orders, now, span]);
   const change = useMemo(() => activityChange(orders, now, 7), [orders, now]);
   const rows = useMemo(() => liveOrders(orders, 5), [orders]);
 
