@@ -10,6 +10,37 @@
   .mb-fab-shell { right: 24px; bottom: 24px; }
   .mb-fab-shell--stacked { bottom: 92px; }
 }
+
+/* On the order-detail page, keep the section-jump control in the mobile
+   toolbar instead of fixing it over content while the payment card scrolls. */
+@media (max-width: 767px) {
+  .mb-fab-shell--mobile-inline {
+    position: relative;
+    top: auto;
+    right: auto;
+    bottom: auto;
+    left: auto;
+    z-index: 70;
+    flex: 0 0 auto;
+    align-self: center;
+  }
+  .mb-fab-shell--mobile-inline .mb-fab {
+    width: 44px;
+    height: 44px;
+    border-radius: 14px;
+  }
+  .mb-fab-shell--mobile-inline .mb-fab-stack,
+  .mb-fab-shell--mobile-inline .mb-fab-panel {
+    top: calc(100% + 12px);
+    bottom: auto;
+  }
+  .mb-fab-shell--mobile-inline .mb-fab-stack--up {
+    flex-direction: column;
+    max-height: calc(100vh - 190px);
+    overflow-y: auto;
+  }
+}
+
 .mb-fab {
   position: relative;
   display: grid;

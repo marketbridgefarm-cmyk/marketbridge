@@ -64,6 +64,7 @@ export default function FilterFab({
   choices = null,
   label = 'Filters',
   stacked = false,
+  mobileInline = false,
 }) {
   const [open, setOpen] = useState(false);
   const [activeKey, setActiveKey] = useState(null);
@@ -105,7 +106,10 @@ export default function FilterFab({
   const currentLabel = (i) => i.options?.find((o) => o.id === i.value)?.label;
 
   return (
-    <div className={`mb-fab-shell${stacked ? ' mb-fab-shell--stacked' : ''}`} ref={shellRef}>
+    <div
+      className={`mb-fab-shell${stacked ? ' mb-fab-shell--stacked' : ''}${mobileInline ? ' mb-fab-shell--mobile-inline' : ''}`}
+      ref={shellRef}
+    >
       {open && choiceLists.length > 0 && (
         <ul className="mb-fab-stack mb-fab-stack--up" aria-label={label}>
           {choiceLists.map((list, li) => (

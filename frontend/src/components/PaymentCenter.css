@@ -130,7 +130,12 @@
 .payment-center .pc-chip--neutral { background: var(--pc-neutral-bg); color: var(--pc-neutral); }
 
 /* ---------- Body: indented once ---------- */
-.payment-center > :not(.pc-head) { margin-left: var(--pc-indent) !important; }
+/* Shared order-card rules set direct children to width: 100%. Subtract the
+   indent from that width so these shifted sections still end inside the card. */
+.payment-center > :not(.pc-head) {
+  width: calc(100% - var(--pc-indent)) !important;
+  margin-left: var(--pc-indent) !important;
+}
 
 .payment-center .pc-alert {
   margin-top: 0;
