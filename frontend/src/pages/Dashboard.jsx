@@ -11,6 +11,7 @@ import FilterFab from '../components/FilterFab.jsx';
 import { orderStatusChoices, matchesOrderStatus } from '../utils/orderStatusFilters.js';
 import { InspectionRequestSummary, TransportRequestSummary } from '../components/RequestScopeSummary.jsx';
 import './dashboards/Dashboard.css';
+import './dashboards/RecordCard.css';
 
 // ============================================================================
 // UNIFIED DASHBOARD
@@ -125,11 +126,11 @@ function Pill({ tone, dot, children }) {
 function Progress({ steps }) {
   if (!steps) return null;
   return (
-    <div className="order-progress" aria-label="Order progress">
+    <div className="rc-steps" role="list" aria-label="Order progress">
       {steps.map((step) => (
-        <div key={step.label} className={`progress-step ${step.cls}`}>
-          <span className="progress-dot" aria-hidden="true" />
-          <span className="progress-label">{step.label}</span>
+        <div key={step.label} role="listitem" className={`rc-step ${step.cls}`}>
+          <span className="rc-dot" aria-hidden="true" />
+          <span className="rc-step-label">{step.label}</span>
         </div>
       ))}
     </div>
@@ -161,61 +162,53 @@ function RecordCard({
   blockTitle, blockNote, badges, steps,
   amount, footer, stack, highlight,
 }) {
+  // All class names are rc-* on purpose: .order-card / .order-title etc. are also styled by the Orders
+  // page, and whichever stylesheet loaded last used to win (dark text on the dark card, stray lines).
   return (
-    <article className={`order-card${highlight ? ' order-card--action' : ''}`}>
-      <div className="order-card-head">
-        <div className="order-card-head-text">
-          <span className={`eyebrow${selling ? ' is-selling' : ''}`}>{eyebrow}</span>
-          <h2 className="order-title" title={title}>{title}</h2>
-          {date && <p className="order-date">{date}</p>}
-        </div>
-        <div className="order-card-head-party">
-          <div className="order-party-info">
-            <span className="order-party-role">{partyRole}</span>
-            <span className="order-party-name">{partyName}</span>
-          </div>
-          <div className={`order-avatar tone-${avatarTone}`} aria-hidden="true">{avatar}</div>
+    <article className={`rc ${selling ? 'rc--selling' : 'rc--buying'}${highlight ? ' rc--action' : ''}`}>
+      <header className="rc-top">
+        <span className="rc-eyebrow">{eyebrow}</span>
+        {blockNote && <span className="rc-code" title={blockTitle}>{blockNote}</span>}
+      </header>
+
+      <div className="rc-main">
+        <h2 className="rc-title" title={title}>{title}</h2>
+        {date && <p className="rc-date">Created {date}</p>}
+      </div>
+
+      {badges && <div className="rc-badges">{badges}</div>}
+
+      <div className="rc-party">
+        <div className={`rc-avatar tone-${avatarTone}`} aria-hidden="true">{avatar}</div>
+        <div className="rc-party-text">
+          <span className="rc-party-role">{partyRole}</span>
+          <span className="rc-party-name">{partyName}</span>
         </div>
       </div>
 
-      <div className="card-body">
-        <section className="card-block">
-          <div className="card-block-title">
-            <h3>{blockTitle}</h3>
-            {blockNote && <span className="card-block-note">{blockNote}</span>}
-          </div>
-          <div className="card-block-body">
-            <div className="badges">{badges}</div>
-            <Progress steps={steps} />
-          </div>
-        </section>
+      <Progress steps={steps} />
 
+      <footer className={`rc-foot${stack ? ' rc-foot--stack' : ''}`}>
         {amount != null && (
-          <section className="card-block">
-            <div className="card-block-title"><h3>Amount</h3></div>
-            <div className="card-block-body">
-              <div className="order-price">
-                <span className="price-amount">{amountFmt(amount)}</span>
-                <span className="price-currency">ETB</span>
-              </div>
-            </div>
-          </section>
+          <div className="rc-amount">
+            <span className="rc-amount-label">Amount</span>
+            <span className="rc-amount-value">
+              <b>{amountFmt(amount)}</b>
+              <span>ETB</span>
+            </span>
+          </div>
         )}
-
-        <div className={`order-actions${stack ? ' order-actions--stack' : ''}`}>{footer}</div>
-      </div>
+        <div className="rc-actions">{footer}</div>
+      </footer>
     </article>
   );
 }
 
-function CardFooter({ date, to, text }) {
+function CardFooter({ to, text }) {
   return (
-    <>
-      <span className="order-time">{date ? `Created ${date}` : 'Recently updated'}</span>
-      <Link className="btn-view" to={to}>
-        {text} <ArrowIcon />
-      </Link>
-    </>
+    <Link className="rc-cta" to={to}>
+      {text} <ArrowIcon />
+    </Link>
   );
 }
 
@@ -947,7 +940,7 @@ export default function Dashboard() {
                       )}
                     </div>
                   ) : (
-                    <span className="order-time">
+                    <span className="rc-created">
                       {['PENDING', 'SELECTED', 'COUNTERED'].includes(o.status)
                         ? 'Waiting on the other party'
                         : '—'}
