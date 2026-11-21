@@ -157,6 +157,16 @@
     .mb-bottomnav-item.active .mb-bottomnav-label { max-width: 64px; font-size: 13px; }
   }
 
+  /* Clearance for the floating nav, painted by the PAGE (not by .app-main): a transparent bottom border is
+     filled by the page's own background because background-origin is the border box, so the gradient runs
+     seamlessly under the nav. Short pages also stretch to the screen bottom. */
+  body.has-sidebar .app-main > :is(main, .sd-dashboard) {
+    border-bottom: calc(96px + env(safe-area-inset-bottom, 0px)) solid transparent;
+    background-origin: border-box;
+    min-height: calc(100vh - 56px - env(safe-area-inset-top, 0px));
+    min-height: calc(100dvh - 56px - env(safe-area-inset-top, 0px));
+  }
+
   /* Sticky in-page tab strips must sit below the sticky top bar. */
   body.has-sidebar .dashboard-page .sd-tabs-list { top: calc(56px + env(safe-area-inset-top, 0px) + 6px); }
 }
