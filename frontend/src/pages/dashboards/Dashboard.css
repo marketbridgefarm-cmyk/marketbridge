@@ -173,6 +173,14 @@
   box-shadow: 0 5px 16px rgba(217, 119, 87, .15);
 }
 
+.dashboard-page .btn-primary,
+#root .dashboard-page .btn:not(.btn-light):not(.btn-outline):not(.btn-danger) {
+  /* styles.css paints these with an orange-to-green gradient (more specific than the rule above) */
+  background-image: none;
+  background-color: var(--dash-accent);
+  color: var(--dash-accent-ink);
+}
+
 .dashboard-page .btn-primary:hover {
   border-color: transparent;
   background: var(--dash-accent-bright);
@@ -297,6 +305,7 @@
 }
 
 .dashboard-page .service-access-copy strong {
+  color: var(--dash-text);   /* styles.css sets a dark ink for this class; unreadable on the charcoal cards */
   font-size: .96rem;
 }
 

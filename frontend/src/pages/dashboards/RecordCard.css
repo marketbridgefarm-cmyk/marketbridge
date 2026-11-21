@@ -1,0 +1,243 @@
+/* ==========================================================================
+   Dashboard record card (offers, orders, listings, payments) — .rc
+   Self-contained on purpose: every class is rc-*, so the Orders page / mb-cards
+   stylesheets (which also style .order-card, .order-title, .order-progress …) can
+   never restyle it again, whatever order the page CSS files load in.
+   Uses the dashboard's dark tokens (--dash-*) defined on .dashboard-page.
+   ========================================================================== */
+
+.dashboard-page .rc {
+  --rc-accent: var(--dash-accent-bright);
+  position: relative;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 14px;
+  overflow: hidden;
+  padding: 18px 18px 18px 22px;
+  border: 1px solid var(--dash-line);
+  border-radius: var(--dash-radius);
+  background: linear-gradient(160deg, var(--dash-surface-raised), var(--dash-surface) 72%);
+  box-shadow: 0 5px 18px rgba(0, 0, 0, .16);
+}
+.dashboard-page .rc--selling { --rc-accent: var(--dash-green); }
+
+/* Slim colour bar: orange = you are buying, green = you are selling. */
+.dashboard-page .rc::before {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: var(--rc-accent);
+  content: "";
+  opacity: .9;
+}
+.dashboard-page .rc--action {
+  border-color: rgba(217, 119, 87, .6);
+  box-shadow: 0 0 0 1px rgba(217, 119, 87, .14), var(--dash-shadow);
+}
+
+/* ---- Top line ----------------------------------------------------------- */
+.dashboard-page .rc-top {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.dashboard-page .rc-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--rc-accent);
+  font-size: .72rem;
+  font-weight: 800;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+}
+.dashboard-page .rc-eyebrow::before {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  content: "";
+}
+.dashboard-page .rc-code {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dash-muted);
+  font-size: .72rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .05em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- Title -------------------------------------------------------------- */
+.dashboard-page .rc-main { min-width: 0; }
+.dashboard-page .rc-title {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  color: var(--dash-text);
+  font-size: 1.3rem;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.dashboard-page .rc-date {
+  margin: 4px 0 0;
+  color: var(--dash-muted);
+  font-size: .82rem;
+}
+
+/* ---- Status pills (reuses .status-pill from Dashboard.css) -------------- */
+.dashboard-page .rc-badges { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* ---- Other party -------------------------------------------------------- */
+.dashboard-page .rc-party {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--dash-line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, .035);
+}
+.dashboard-page .rc-avatar {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  place-items: center;
+  border: 1px solid var(--dash-line-strong);
+  border-radius: 14px;
+  background: var(--dash-surface-soft);
+  color: var(--dash-text);
+  font-size: .8rem;
+  font-weight: 850;
+}
+.dashboard-page .rc-avatar.tone-success { border-color: rgba(126, 224, 160, .5); color: var(--dash-green); }
+.dashboard-page .rc-avatar.tone-info    { border-color: rgba(143, 207, 244, .5); color: var(--dash-blue); }
+.dashboard-page .rc-avatar.tone-gold    { border-color: rgba(242, 202, 119, .5); color: var(--dash-gold); }
+.dashboard-page .rc-avatar.tone-danger  { border-color: rgba(255, 138, 128, .55); color: var(--dash-red); }
+.dashboard-page .rc-party-text { display: grid; min-width: 0; gap: 1px; }
+.dashboard-page .rc-party-role {
+  color: var(--dash-muted);
+  font-size: .7rem;
+  font-weight: 700;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+.dashboard-page .rc-party-name {
+  overflow: hidden;
+  color: var(--dash-text);          /* never inherits a light-theme ink colour */
+  font-size: .95rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- Progress (horizontal stepper) -------------------------------------- */
+.dashboard-page .rc-steps { display: flex; min-width: 0; align-items: flex-start; }
+.dashboard-page .rc-step {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  flex: 1 1 0;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  color: #8a867f;
+  text-align: center;
+}
+.dashboard-page .rc-step:not(:last-child)::after {
+  position: absolute;
+  top: 6px;
+  left: calc(50% + 9px);
+  width: calc(100% - 18px);
+  height: 2px;
+  background: var(--dash-line);
+  content: "";
+}
+.dashboard-page .rc-step.done,
+.dashboard-page .rc-step.current { color: var(--dash-accent-bright); }
+.dashboard-page .rc-step.done:not(:last-child)::after { background: var(--dash-accent); }
+.dashboard-page .rc-dot {
+  position: relative;
+  z-index: 1;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--dash-line-strong);
+  border-radius: 50%;
+  background: var(--dash-surface);
+}
+.dashboard-page .rc-step.done .rc-dot,
+.dashboard-page .rc-step.current .rc-dot {
+  border-color: var(--dash-accent);
+  background: var(--dash-accent);
+  box-shadow: 0 0 0 3px rgba(217, 119, 87, .14);
+}
+.dashboard-page .rc-step-label { font-size: .68rem; line-height: 1.2; }
+
+/* ---- Footer: amount + action ------------------------------------------- */
+.dashboard-page .rc-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--dash-line);
+}
+.dashboard-page .rc-amount { display: grid; gap: 2px; min-width: 0; }
+.dashboard-page .rc-amount-label {
+  color: var(--dash-muted);
+  font-size: .7rem;
+  font-weight: 700;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+.dashboard-page .rc-amount-value { display: flex; align-items: baseline; gap: 7px; }
+.dashboard-page .rc-amount-value b {
+  color: var(--dash-text);
+  font-size: 1.75rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  line-height: 1.1;
+}
+.dashboard-page .rc-amount-value span { color: var(--rc-accent); font-size: .85rem; font-weight: 800; }
+
+.dashboard-page .rc-actions { display: flex; flex: 1 1 150px; min-width: 0; justify-content: flex-end; }
+.dashboard-page .rc-cta {
+  display: inline-flex;
+  min-height: 46px;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 20px;
+  border: 1px solid rgba(217, 119, 87, .55);
+  border-radius: 14px;
+  background: rgba(217, 119, 87, .14);
+  color: var(--dash-accent-bright);
+  font-weight: 750;
+  text-decoration: none;
+  transition: background .15s ease, transform .15s ease;
+}
+.dashboard-page .rc-cta:hover { background: rgba(217, 119, 87, .24); }
+.dashboard-page .rc-cta:active { transform: scale(.98); }
+@media (min-width: 560px) { .dashboard-page .rc-cta { flex: 0 0 auto; } }
+.dashboard-page .rc-created { color: var(--dash-muted); font-size: .85rem; }
+
+/* Offers that need an answer: input + buttons stack under the amount, full width. */
+.dashboard-page .rc-foot--stack .rc-actions { flex: 1 1 100%; justify-content: stretch; }
+.dashboard-page .rc-foot--stack .rc-actions > * { width: 100%; }
+
+/* ---- Roomier on tablets/desktop ---------------------------------------- */
+@media (min-width: 720px) {
+  .dashboard-page .rc { padding: 22px 24px 22px 28px; gap: 16px; }
+  .dashboard-page .rc-title { font-size: 1.4rem; }
+}
+@media (prefers-reduced-motion: reduce) { .dashboard-page .rc-cta { transition: none; } }
