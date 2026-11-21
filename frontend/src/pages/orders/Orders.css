@@ -496,6 +496,10 @@
 .progress-step.done .progress-dot { background: var(--mb-ok); border-color: var(--mb-ok); }
 
 .progress-step.current { color: var(--mb-ink); }
+/* Where a cancelled order stopped. The line leading to it is grey, not "completed" green. */
+.progress-step.ended { color: #b91c1c; font-weight: 700; }
+.progress-step.ended .progress-dot { background: #b91c1c; border-color: #b91c1c; }
+.progress-step.done:has(+ .progress-step.ended)::before { background: var(--mb-line, #cbd5e1); }
 .progress-step.current .progress-dot {
   background: var(--mb-accent);
   border-color: var(--mb-accent);
@@ -516,7 +520,7 @@
   width: fit-content;
   min-width: min(240px, 100%);
   max-width: 100%;
-  margin-inline: auto;
+  margin-inline: 0;          /* same left edge as the amount and created date (was centred, ~25px off) */
   margin-top: 0;
 }
 
@@ -555,7 +559,7 @@
   justify-content: space-between;
   gap: 12px;
   margin-top: 22px;
-  padding-inline-end: 14px;
+  padding-inline-end: 0;     /* right edge lines up with the status label above */
 }
 
 .order-time {
