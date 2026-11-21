@@ -153,3 +153,44 @@
   .dov-steps i { flex: 1; width: auto; }
 }
 @media (prefers-reduced-motion: no-preference) { .dov-order, .dov-cta { transition: background .15s ease; } }
+
+/* ============================================================
+   Dark variant — the user dashboard (.dashboard-page) is a charcoal theme, so the overview
+   cards follow it instead of glaring white. Scoped: admin and other overviews are unchanged.
+   ============================================================ */
+.dashboard-page .dash-overview {
+  --mb-surface:       var(--dash-surface);
+  --mb-shadow-card:   0 5px 18px rgba(0, 0, 0, .22);
+  --mb-line-soft:     var(--dash-line);
+  --ov-ink:           var(--dash-text);
+  --ov-muted:         var(--dash-muted);
+  --ov-soft:          rgba(255, 255, 255, .06);
+  --ov-accent:        var(--dash-accent-bright);
+  --ov-accent-tint:   rgba(217, 119, 87, .14);
+  --ov-ok:            var(--dash-green);
+  --ov-info:          var(--dash-blue);
+  --ov-wait:          var(--dash-gold);
+  --ov-danger:        var(--dash-red);
+  --mb-ok-bg:         rgba(126, 224, 160, .14);
+  --mb-danger-bg:     rgba(255, 138, 128, .14);
+}
+.dashboard-page .dash-overview .dov-card {
+  border: 1px solid var(--dash-line);
+  background: linear-gradient(160deg, var(--dash-surface-raised), var(--dash-surface) 75%);
+}
+.dashboard-page .dash-overview .dov-stat.is-accent { background: linear-gradient(160deg, rgba(217, 119, 87, .2), rgba(217, 119, 87, .08)); }
+.dashboard-page .dash-overview .dov-base { fill: #55524d; }
+.dashboard-page .dash-overview .dov-steps i { background: #4a4742; }
+.dashboard-page .dash-overview .dov-steps i.is-on { background: var(--dash-text); }
+.dashboard-page .dash-overview .dov-week .is-today { background: var(--dash-accent); color: var(--dash-accent-ink); }
+.dashboard-page .dash-overview .dov-week .is-today .dov-wd { color: rgba(33, 18, 12, .75); }
+.dashboard-page .dash-overview .dov-badge,
+.dashboard-page .dash-overview .dov-cta { background: var(--dash-accent); color: var(--dash-accent-ink); }
+.dashboard-page .dash-overview .dov-item:hover .dov-cta { background: var(--dash-accent-bright); }
+.dashboard-page .dash-overview .dov-foot-alert b { color: var(--dash-accent-ink); }
+.dashboard-page .dash-overview .dov-pill-wait   { background: rgba(242, 202, 119, .16); color: var(--dash-gold); }
+.dashboard-page .dash-overview .dov-pill-info   { background: rgba(143, 207, 244, .16); color: var(--dash-blue); }
+.dashboard-page .dash-overview .dov-pill-accent { background: rgba(217, 119, 87, .18);  color: var(--dash-accent-bright); }
+.dashboard-page .dash-overview .dov-pill-ok     { background: rgba(126, 224, 160, .16); color: var(--dash-green); }
+.dashboard-page .dash-overview .dov-pill-danger { background: rgba(255, 138, 128, .16); color: var(--dash-red); }
+.dashboard-page .dash-overview .dov-order:hover { background: rgba(255, 255, 255, .05); }
