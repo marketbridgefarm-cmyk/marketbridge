@@ -103,6 +103,11 @@ function progressFor(order) {
   const steps = ['Order placed', 'Payment', 'Transport', 'Delivered'];
   const status = String(order.status || '').toUpperCase();
 
+  // A cancelled order never reaches the later steps: show where it stopped instead of three empty "to do" dots.
+  if (status === 'CANCELLED') {
+    return [{ label: 'Order placed', cls: 'done' }, { label: 'Cancelled', cls: 'ended' }];
+  }
+
   const paid = order.paymentSummary === 'PAID';
   const hasTransport = Boolean(order.transportJob);
   const transportOk = hasTransport && order.transportJob.status !== 'FAILED';
