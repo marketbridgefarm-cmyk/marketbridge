@@ -162,53 +162,63 @@ function RecordCard({
   blockTitle, blockNote, badges, steps,
   amount, footer, stack, highlight,
 }) {
-  // All class names are rc-* on purpose: .order-card / .order-title etc. are also styled by the Orders
-  // page, and whichever stylesheet loaded last used to win (dark text on the dark card, stray lines).
+  // Same look as the original dashboard card. Class names are rc-* on purpose: .order-card / .order-title /
+  // .order-party-name are also styled by the Orders page, and whichever sheet loaded last used to restyle this card.
   return (
-    <article className={`rc ${selling ? 'rc--selling' : 'rc--buying'}${highlight ? ' rc--action' : ''}`}>
-      <header className="rc-top">
-        <span className="rc-eyebrow">{eyebrow}</span>
-        {blockNote && <span className="rc-code" title={blockTitle}>{blockNote}</span>}
+    <article className={`rc${selling ? ' rc--selling' : ''}${highlight ? ' rc--action' : ''}`}>
+      <header className="rc-head">
+        <div className="rc-head-text">
+          <span className="rc-eyebrow">{eyebrow}</span>
+          <h2 className="rc-title" title={title}>{title}</h2>
+          {date && <p className="rc-date">{date}</p>}
+        </div>
+        <div className="rc-party">
+          <div className={`rc-avatar tone-${avatarTone}`} aria-hidden="true">{avatar}</div>
+          <div className="rc-party-text">
+            <span className="rc-party-role">{partyRole}</span>
+            <span className="rc-party-name">{partyName}</span>
+          </div>
+        </div>
       </header>
 
-      <div className="rc-main">
-        <h2 className="rc-title" title={title}>{title}</h2>
-        {date && <p className="rc-date">Created {date}</p>}
-      </div>
-
-      {badges && <div className="rc-badges">{badges}</div>}
-
-      <div className="rc-party">
-        <div className={`rc-avatar tone-${avatarTone}`} aria-hidden="true">{avatar}</div>
-        <div className="rc-party-text">
-          <span className="rc-party-role">{partyRole}</span>
-          <span className="rc-party-name">{partyName}</span>
-        </div>
-      </div>
-
-      <Progress steps={steps} />
-
-      <footer className={`rc-foot${stack ? ' rc-foot--stack' : ''}`}>
-        {amount != null && (
-          <div className="rc-amount">
-            <span className="rc-amount-label">Amount</span>
-            <span className="rc-amount-value">
-              <b>{amountFmt(amount)}</b>
-              <span>ETB</span>
-            </span>
+      <div className="rc-body">
+        <section className="rc-block">
+          <div className="rc-block-title">
+            <h3>{blockTitle}</h3>
+            {blockNote && <span className="rc-note">{blockNote}</span>}
           </div>
+          <div className="rc-block-body">
+            <div className="rc-badges">{badges}</div>
+            <Progress steps={steps} />
+          </div>
+        </section>
+
+        {amount != null && (
+          <section className="rc-block">
+            <div className="rc-block-title"><h3>Amount</h3></div>
+            <div className="rc-block-body">
+              <div className="rc-price">
+                <span className="rc-price-amount">{amountFmt(amount)}</span>
+                <span className="rc-price-currency">ETB</span>
+              </div>
+            </div>
+          </section>
         )}
-        <div className="rc-actions">{footer}</div>
-      </footer>
+
+        <div className={`rc-actions${stack ? ' rc-actions--stack' : ''}`}>{footer}</div>
+      </div>
     </article>
   );
 }
 
-function CardFooter({ to, text }) {
+function CardFooter({ date, to, text }) {
   return (
-    <Link className="rc-cta" to={to}>
-      {text} <ArrowIcon />
-    </Link>
+    <>
+      <span className="rc-created">{date ? `Created ${date}` : 'Recently updated'}</span>
+      <Link className="rc-cta" to={to}>
+        {text} <ArrowIcon />
+      </Link>
+    </>
   );
 }
 
