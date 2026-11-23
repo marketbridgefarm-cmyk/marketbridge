@@ -157,7 +157,7 @@ function StatTile({ label, value, accent }) {
 }
 
 function RecordCard({
-  eyebrow, selling, title, date,
+  eyebrow, selling, title,
   partyRole, partyName, avatar, avatarTone,
   blockTitle, blockNote, badges, steps,
   amount, footer, stack, highlight,
@@ -167,18 +167,15 @@ function RecordCard({
   return (
     <article className={`rc${selling ? ' rc--selling' : ''}${highlight ? ' rc--action' : ''}`}>
       <header className="rc-head">
-        <div className="rc-head-text">
-          <span className="rc-eyebrow">{eyebrow}</span>
-          <h2 className="rc-title" title={title}>{title}</h2>
-          {date && <p className="rc-date">{date}</p>}
-        </div>
+        <span className="rc-eyebrow">{eyebrow}</span>
         <div className="rc-party">
-          <div className={`rc-avatar tone-${avatarTone}`} aria-hidden="true">{avatar}</div>
           <div className="rc-party-text">
             <span className="rc-party-role">{partyRole}</span>
             <span className="rc-party-name">{partyName}</span>
           </div>
+          <div className={`rc-avatar tone-${avatarTone}`} aria-hidden="true">{avatar}</div>
         </div>
+        <h2 className="rc-title" title={title}>{title}</h2>
       </header>
 
       <div className="rc-body">
