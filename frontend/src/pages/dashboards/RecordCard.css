@@ -26,13 +26,16 @@
   box-shadow: 0 0 0 1px rgba(217, 119, 87, .14), var(--dash-shadow);
 }
 
-/* ---- Head: title + date on the left, seller on the right ----------------- */
+/* ---- Head: BUYING label left, seller badge top right, title full width below ---- */
 .dashboard-page .rc-head {
   position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "eyebrow party"
+    "title   title";
   align-items: center;
-  gap: 14px 18px;
+  gap: 12px 14px;
   padding: var(--rc-pad) var(--rc-pad) calc(var(--rc-pad) + 4px);
   border-bottom: 1px solid var(--dash-line);
   background: rgba(255, 255, 255, .02);
@@ -48,11 +51,13 @@
   background: #c2410c;
   content: "";
 }
-.dashboard-page .rc-head-text { min-width: 0; }
 .dashboard-page .rc-eyebrow {
+  grid-area: eyebrow;
   display: inline-flex;
   align-items: center;
+  align-self: start;
   gap: 8px;
+  padding-top: 4px;
   color: var(--rc-eyebrow);
   font-size: .74rem;
   font-weight: 800;
@@ -62,13 +67,15 @@
 .dashboard-page .rc-eyebrow::before {
   width: 7px;
   height: 7px;
+  flex: 0 0 7px;
   border-radius: 50%;
   background: currentColor;
   content: "";
 }
 .dashboard-page .rc-title {
+  grid-area: title;
   display: -webkit-box;
-  margin: 8px 0 0;
+  margin: 0;
   overflow: hidden;
   color: var(--dash-text);
   font-size: 1.3rem;
@@ -77,9 +84,9 @@
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
 }
-.dashboard-page .rc-date { margin: 4px 0 0; color: var(--dash-muted); font-size: .82rem; }
 
-.dashboard-page .rc-party { display: flex; min-width: 0; align-items: center; gap: 12px; }
+/* seller badge: name right-aligned, avatar at the far right */
+.dashboard-page .rc-party { grid-area: party; display: flex; min-width: 0; align-items: center; justify-content: flex-end; gap: 11px; }
 .dashboard-page .rc-avatar {
   display: grid;
   width: 44px;
@@ -97,7 +104,7 @@
 .dashboard-page .rc-avatar.tone-info    { border-color: rgba(143, 207, 244, .5); color: var(--dash-blue); }
 .dashboard-page .rc-avatar.tone-gold    { border-color: rgba(242, 202, 119, .5); color: var(--dash-gold); }
 .dashboard-page .rc-avatar.tone-danger  { border-color: rgba(255, 138, 128, .55); color: var(--dash-red); }
-.dashboard-page .rc-party-text { display: grid; min-width: 0; gap: 1px; }
+.dashboard-page .rc-party-text { display: grid; min-width: 0; gap: 1px; text-align: right; }
 .dashboard-page .rc-party-role {
   color: var(--dash-muted);
   font-size: .72rem;
@@ -106,7 +113,7 @@
   text-transform: uppercase;
 }
 .dashboard-page .rc-party-name {
-  max-width: 190px;
+  max-width: 150px;
   overflow: hidden;
   color: var(--dash-text);              /* never inherits a light-theme ink colour */
   font-size: .92rem;
@@ -238,14 +245,15 @@
 /* ---- Phones: seller goes under the title, left-aligned, full width ------- */
 @media (max-width: 479px) {
   .dashboard-page .rc { --rc-pad: 20px; }
-  .dashboard-page .rc-head { grid-template-columns: minmax(0, 1fr); }
-  .dashboard-page .rc-party-name { max-width: none; }
+  .dashboard-page .rc-party-name { max-width: 128px; }
 }
 
 /* ---- Wider screens: roomier, button no longer full width ----------------- */
 @media (min-width: 720px) {
   .dashboard-page .rc { --rc-pad: 26px; }
   .dashboard-page .rc-title { font-size: 1.4rem; }
+  .dashboard-page .rc-head { grid-template-areas: "eyebrow party" "title party"; }
+  .dashboard-page .rc-party-name { max-width: 220px; }
   .dashboard-page .rc-actions { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
   .dashboard-page .rc-actions--stack { grid-template-columns: minmax(0, 1fr); }
   .dashboard-page .rc-cta { min-height: 48px; min-width: 180px; }
