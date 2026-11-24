@@ -5,6 +5,7 @@ import api from '../api/client';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
 import ListingInspectionScope from '../components/ListingInspectionScope.jsx';
+import SellerProfileCard from '../components/SellerProfileCard.jsx';
 import './listing-detail/ListingDetail.css';
 
 const money = (n) => Number(n || 0).toLocaleString();
@@ -676,66 +677,7 @@ export default function ListingDetail() {
               </div>
             )}
 
-            {listing.seller && (
-              <div className="card">
-                <CardHead
-                  eyebrow="SELLER"
-                  title={listing.seller.name || 'Seller'}
-                  side={
-                    listing.seller.rating != null ? (
-                      <>
-                        <span className="ld-card-side-label">Rating</span>
-                        <span className="ld-card-side-value">
-                          ★ {Number(listing.seller.rating).toFixed(1)}
-                        </span>
-                      </>
-                    ) : null
-                  }
-                />
-
-                <div className="detail-facts">
-                  {listing.seller.verificationStatus && (
-                    <div>
-                      <span>Verification</span>
-                      <strong>{String(listing.seller.verificationStatus).replace(/_/g, ' ')}</strong>
-                    </div>
-                  )}
-
-                  {listing.seller.location && (
-                    <div>
-                      <span>Based in</span>
-                      <strong>{listing.seller.location}</strong>
-                    </div>
-                  )}
-
-                  {listing.seller.createdAt && (
-                    <div>
-                      <span>Member since</span>
-                      <strong>
-                        {new Date(listing.seller.createdAt).toLocaleDateString(undefined, {
-                          month: 'short',
-                          year: 'numeric',
-                        })}
-                      </strong>
-                    </div>
-                  )}
-
-                  {listing.seller.listingCount != null && (
-                    <div>
-                      <span>Listings</span>
-                      <strong>{listing.seller.listingCount}</strong>
-                    </div>
-                  )}
-
-                  {listing.seller.phone && (
-                    <div>
-                      <span>Phone</span>
-                      <strong>{listing.seller.phone}</strong>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
+            {listing.seller && <SellerProfileCard seller={listing.seller} />}
 
             {isOwner && (
               <div className="card sticky-card">

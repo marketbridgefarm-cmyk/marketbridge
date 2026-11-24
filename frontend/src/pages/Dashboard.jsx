@@ -569,6 +569,11 @@ export default function Dashboard() {
         <DashboardWelcome
           user={user}
           subtitle="Buying, selling, and everything in between — all in one place."
+          stats={[
+            { value: myListings.length, label: 'Listings' },
+            { value: ordersTagged.length, label: 'Orders' },
+            { value: offersSent.length, label: 'Offers sent' },
+          ]}
         >
           <RecentActivity
             items={activityItems}
