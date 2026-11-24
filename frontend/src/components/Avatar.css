@@ -1,0 +1,64 @@
+/* ==========================================================================
+   Avatar — glossy initials / photo badge with soft white ring
+   Sizes: xs 28 · sm 38 · md 50 · lg 76 · xl 104
+   ========================================================================== */
+.mbav {
+  --av-a: #34b27b;
+  --av-b: #1b7a52;
+  --av-ring: 3px;
+  position: relative;
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  box-sizing: border-box;
+  overflow: visible;
+  border-radius: 50%;
+  color: #fff;
+  font-family: var(--mb-font-head, 'Manrope', 'DM Sans', system-ui, sans-serif);
+  font-weight: 800;
+  letter-spacing: -.02em;
+  line-height: 1;
+  background:
+    radial-gradient(120% 120% at 28% 12%, rgba(255, 255, 255, .55), rgba(255, 255, 255, 0) 55%),
+    linear-gradient(145deg, var(--av-a), var(--av-b));
+  box-shadow:
+    0 0 0 var(--av-ring) rgba(255, 255, 255, .88),
+    0 10px 24px rgba(15, 23, 42, .18);
+  user-select: none;
+}
+.mbav--terracotta { --av-a: #f29a6b; --av-b: #c2410c; }
+.mbav--blue       { --av-a: #86aefc; --av-b: #4560d8; }
+.mbav--gold       { --av-a: #f8cb6a; --av-b: #d08a1f; }
+.mbav--violet     { --av-a: #bda4ff; --av-b: #7557dc; }
+.mbav--teal       { --av-a: #55d6c9; --av-b: #0e8f86; }
+
+.mbav--xs { width: 28px;  height: 28px;  font-size: 11px; --av-ring: 2px; }
+.mbav--sm { width: 38px;  height: 38px;  font-size: 14px; --av-ring: 2px; }
+.mbav--md { width: 50px;  height: 50px;  font-size: 18px; }
+.mbav--lg { width: 76px;  height: 76px;  font-size: 27px; }
+.mbav--xl { width: 104px; height: 104px; font-size: 38px; --av-ring: 4px; }
+
+.mbav img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+.mbav-initials { text-shadow: 0 1px 2px rgba(0, 0, 0, .22); }
+
+/* presence dot (bottom-right) and verified badge (bottom-right, a little larger) */
+.mbav-dot,
+.mbav-check {
+  position: absolute;
+  right: -2%;
+  bottom: -2%;
+  width: 26%;
+  height: 26%;
+  min-width: 10px;
+  min-height: 10px;
+  border-radius: 50%;
+  border: max(2px, 8%) solid #fff;
+  box-sizing: border-box;
+}
+.mbav-dot   { background: #22c55e; box-shadow: 0 2px 6px rgba(34, 197, 94, .5); }
+.mbav-check { display: grid; place-items: center; background: linear-gradient(145deg, #3b82f6, #2563eb); box-shadow: 0 2px 8px rgba(37, 99, 235, .45); }
+.mbav-check svg { width: 76%; height: 76%; }
+.mbav--xs .mbav-check, .mbav--xs .mbav-dot { width: 40%; height: 40%; border-width: 1.5px; }
+.mbav--sm .mbav-check, .mbav--sm .mbav-dot { width: 36%; height: 36%; border-width: 2px; }
+
+.mbav-tick { flex: 0 0 auto; color: #3b82f6; vertical-align: -3px; }
