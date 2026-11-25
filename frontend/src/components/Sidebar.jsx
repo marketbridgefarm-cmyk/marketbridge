@@ -7,6 +7,7 @@ import LanguageSwitcher from './LanguageSwitcher.jsx';
 import NotificationCenter from './NotificationCenter.jsx';
 import NavIcon from './NavIcon.jsx';
 import MobileTopBar from './MobileTopBar.jsx';
+import { resolveAvatarUrl } from '../utils/avatarUrl.js';
 import BottomNavBar from './BottomNavBar.jsx';
 import useMediaQuery from './useMediaQuery.js';
 
@@ -202,7 +203,12 @@ export default function Sidebar() {
               aria-expanded={accountOpen}
               onClick={() => setAccountOpen((v) => !v)}
             >
-              <span className="glass-avatar">{user.name?.charAt(0)?.toUpperCase() || 'U'}</span>
+              <span className="glass-avatar">
+                {user.name?.charAt(0)?.toUpperCase() || 'U'}
+                {user.avatarUrl && (
+                  <img className="glass-avatar-img" src={resolveAvatarUrl(user.avatarUrl)} alt="" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                )}
+              </span>
               <span className="glass-profile-info">
                 <span className="glass-profile-name">{user.name}</span>
                 <span className="glass-profile-role">{user.roles?.[0] || 'MarketBridge user'}</span>

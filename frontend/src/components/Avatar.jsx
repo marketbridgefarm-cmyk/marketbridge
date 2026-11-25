@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { resolveAvatarUrl } from '../utils/avatarUrl.js';
 import './Avatar.css';
 
 // Shared avatar for every person in the app (profile card, seller, product cards …).
@@ -22,13 +23,16 @@ export function initialsOf(name = '') {
 
 export default function Avatar({ name, src, size = 'md', tone, verified = false, online = false, className = '' }) {
   const t = tone || toneFor(name || '');
+  const url = resolveAvatarUrl(src);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => { setFailed(false); }, [url]);   // new photo, try again
   return (
     <span
       className={`mbav mbav--${size} mbav--${t}${className ? ` ${className}` : ''}`}
       role="img"
       aria-label={name ? `${name}${verified ? ' (verified)' : ''}` : 'User'}
     >
-      {src ? <img src={src} alt="" loading="lazy" decoding="async" /> : <span className="mbav-initials" aria-hidden="true">{initialsOf(name)}</span>}
+      {url && !failed ? <img src={url} alt="" loading="lazy" decoding="async" onError={() => setFailed(true)} /> : <span className="mbav-initials" aria-hidden="true">{initialsOf(name)}</span>}
       {online && <i className="mbav-dot" aria-hidden="true" />}
       {verified && (
         <i className="mbav-check" aria-hidden="true">

@@ -1,0 +1,48 @@
+.avp { display: grid; justify-items: center; gap: 12px; margin: 4px 0 18px; text-align: center; }
+.avp-frame { position: relative; display: inline-grid; margin: 6px; border-radius: 50%; cursor: pointer; }
+.avp-frame.is-busy { cursor: progress; opacity: .7; }
+.avp-input { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 50%; opacity: 0; cursor: inherit; }
+.avp-frame:focus-within { outline: 3px solid var(--mb-accent-border, #fed7aa); outline-offset: 5px; }
+.avp-cam {
+  position: absolute;
+  right: -2px;
+  bottom: 2px;
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 3px solid #fff;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #33a872, #1e7d57);
+  color: #fff;
+  box-shadow: 0 6px 16px rgba(30, 125, 87, .4);
+  pointer-events: none;
+}
+.avp-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+.avp-btn {
+  min-height: 44px;
+  padding: 0 20px;
+  border: 1.5px solid rgba(30, 125, 87, .45);
+  border-radius: 999px;
+  background: rgba(30, 125, 87, .08);
+  color: #0e6b45;
+  font: 700 .95rem/1 var(--mb-font-body, 'DM Sans', system-ui, sans-serif);
+  cursor: pointer;
+}
+.avp-btn:hover:not(:disabled) { background: rgba(30, 125, 87, .16); }
+.avp-btn:disabled { cursor: not-allowed; opacity: .6; }
+.avp-btn--ghost { border-color: rgba(100, 116, 139, .4); background: transparent; color: var(--mb-muted, #64748b); }
+.avp-msg { max-width: 34ch; margin: 0; color: var(--mb-muted, #64748b); font-size: .85rem; line-height: 1.45; }
+.avp-msg--error { color: #b91c1c; font-weight: 600; }
+
+/* neutral person icon until a name or photo exists */
+.avp-ph {
+  display: grid;
+  width: 104px;
+  height: 104px;
+  place-items: center;
+  border-radius: 50%;
+  color: rgba(255, 255, 255, .95);
+  background: radial-gradient(120% 120% at 28% 12%, rgba(255, 255, 255, .5), rgba(255, 255, 255, 0) 55%), linear-gradient(145deg, #a9b8cf, #7d8fab);
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, .88), 0 10px 24px rgba(15, 23, 42, .16);
+}

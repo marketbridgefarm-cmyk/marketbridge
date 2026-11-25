@@ -132,7 +132,7 @@ export default function ListingCard({ listing }) {
         <p className="gc-loc">{Icon.pin}<span>{listing.location}</span></p>
 
         <div className="gc-seller">
-          <Avatar name={listing.seller?.name || 'Seller'} size="xs" verified={isVerifiedSeller} />
+          <Avatar name={listing.seller?.name || 'Seller'} src={listing.seller?.avatarUrl} size="xs" verified={isVerifiedSeller} />
           <span className="gc-seller-name">{listing.seller?.name || 'Seller'}</span>
           {rating && (
             <span className="gc-rating" title={`Seller rating ${rating.toFixed(1)} out of 5`}>
