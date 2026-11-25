@@ -376,6 +376,8 @@ model User {
   // Normal users can act as both buyer and seller.
   roles Role[] @default([BUYER, SELLER])
 
+  // Private object-storage key of the profile photo (never sent to clients; they get avatarUrl).
+  avatarKey          String?
   location           String?
   region             Region?
   latitude           Float?
