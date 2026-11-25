@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import api from '../api/client';
 import { useAuth } from '../context/AuthContext.jsx';
+import { useToast } from '../context/ToastContext.jsx';
+import AvatarPicker from '../components/AvatarPicker.jsx';
 import './auth/auth.css';
 
 const optional = [
@@ -9,11 +12,14 @@ const optional = [
 ];
 
 export default function Register() {
-  const { register } = useAuth();
+  const { register, refreshUser } = useAuth();
+  const { showToast } = useToast();
   const nav = useNavigate();
   const [form, setForm] = useState({ name: '', email: '', phone: '', password: '', location: '' });
   const [selected, setSelected] = useState([]);
   const [error, setError] = useState('');
+  const [photo, setPhoto] = useState(null);        // prepared (square, small) File, optional
+  const [stage, setStage] = useState('');          // '', 'creating', 'photo'
 
   const toggle = (r) => setSelected((x) => (x.includes(r) ? x.filter((a) => a !== r) : [...x, r]));
 
@@ -29,14 +35,32 @@ export default function Register() {
   async function submit(e) {
     e.preventDefault();
     setError('');
+    setStage('creating');
+    let user;
     try {
-      const user = await register({ ...form, roles: ['BUYER', 'SELLER', ...selected] });
-      nav(dashboardPathFor(user), { replace: true });
+      user = await register({ ...form, roles: ['BUYER', 'SELLER', ...selected] });
     } catch (e) {
       const data = e.response?.data;
       const msg = data?.error || data?.errors?.[0]?.msg || 'Registration failed';
       setError(msg);
+      setStage('');
+      return;
     }
+
+    // The account exists now, so the photo can be uploaded with the new session. A failed upload must never
+    // block sign-up: the person can add the photo later from Account.
+    if (photo) {
+      setStage('photo');
+      try {
+        const body = new FormData();
+        body.append('avatar', photo, photo.name || 'avatar.webp');
+        await api.post('/auth/me/avatar', body);
+        await refreshUser();
+      } catch (e) {
+        showToast(e.response?.data?.error || 'Your account is ready, but the photo could not be uploaded. You can add it from Account settings.', 'info', 7000);
+      }
+    }
+    nav(dashboardPathFor(user), { replace: true });
   }
 
   return (
@@ -59,6 +83,7 @@ export default function Register() {
           <h1>Create your account</h1>
           {error && <div className="alert error">{error}</div>}
           <form onSubmit={submit}>
+            <AvatarPicker name={form.name} onSelect={setPhoto} onRemove={() => setPhoto(null)} busy={stage !== ''} />
             <label>Full name</label>
             <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
             <label>Email</label>
@@ -77,7 +102,9 @@ export default function Register() {
                 </button>
               ))}
             </div>
-            <button className="btn btn-primary btn-lg full mt" type="submit">Create account</button>
+            <button className="btn btn-primary btn-lg full mt" type="submit" disabled={stage !== ''}>
+              {stage === 'creating' ? 'Creating your account…' : stage === 'photo' ? 'Uploading your photo…' : 'Create account'}
+            </button>
           </form>
           <p className="muted mt">Already registered? <Link to="/login">Log in</Link></p>
         </div>

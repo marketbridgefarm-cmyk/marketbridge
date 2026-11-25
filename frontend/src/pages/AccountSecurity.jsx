@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext.jsx';
 import { LANGUAGES, useTranslation } from '../context/I18nContext.jsx';
+import { useToast } from '../context/ToastContext.jsx';
+import AvatarPicker from '../components/AvatarPicker.jsx';
 
 // Self-service MFA (TOTP) enrollment/disable. Linked from AdminDashboard
 // (admin-only backend routes now require MFA — see requireMfa() in
@@ -9,6 +11,9 @@ import { LANGUAGES, useTranslation } from '../context/I18nContext.jsx';
 export default function AccountSecurity() {
   const { user, refreshUser } = useAuth();
   const { t } = useTranslation();
+  const { showToast } = useToast();
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoError, setPhotoError] = useState('');
   const [status, setStatus] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -44,6 +49,37 @@ export default function AccountSecurity() {
   }
 
   useEffect(() => { loadStatus(); }, []);
+
+  // Profile photo: saved immediately when chosen or removed.
+  async function uploadPhoto(file) {
+    setPhotoBusy(true);
+    setPhotoError('');
+    try {
+      const body = new FormData();
+      body.append('avatar', file, file.name || 'avatar.webp');
+      await api.post('/auth/me/avatar', body);
+      await refreshUser();
+      showToast('Profile photo updated.', 'success');
+    } catch (e) {
+      setPhotoError(e.response?.data?.error || 'Could not upload the photo. Please try again.');
+    } finally {
+      setPhotoBusy(false);
+    }
+  }
+
+  async function removePhoto() {
+    setPhotoBusy(true);
+    setPhotoError('');
+    try {
+      await api.delete('/auth/me/avatar');
+      await refreshUser();
+      showToast('Profile photo removed.', 'success');
+    } catch (e) {
+      setPhotoError(e.response?.data?.error || 'Could not remove the photo. Please try again.');
+    } finally {
+      setPhotoBusy(false);
+    }
+  }
 
   async function savePreferences(e) {
     e.preventDefault();
@@ -109,6 +145,18 @@ export default function AccountSecurity() {
 
   return (
     <main className="section">
+      <div className="card" style={{ maxWidth: 560, margin: '0 auto 16px' }}>
+        <h2 style={{ marginTop: 0 }}>Profile photo</h2>
+        <AvatarPicker
+          name={user?.name}
+          src={user?.avatarUrl}
+          onSelect={uploadPhoto}
+          onRemove={removePhoto}
+          busy={photoBusy}
+          error={photoError}
+          hint="Shown on your profile, your listings and your messages."
+        />
+      </div>
       <div className="card" style={{ maxWidth: 560, margin: '0 auto' }}>
         <h1>Account security</h1>
         {error && <div className="alert error">{error}</div>}
