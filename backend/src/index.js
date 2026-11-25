@@ -26,6 +26,7 @@ const {
 } = require('./middleware/rateLimit');
 
 const authRoutes = require('./routes/auth');
+const userRoutes = require('./routes/users');
 const listingRoutes = require('./routes/listings');
 const offerRoutes = require('./routes/offers');
 const inspectionRoutes = require('./routes/inspections');
@@ -358,6 +359,8 @@ app.get('/api/public/stats', async (req, res) => {
 // ============================================================================
 
 app.use('/api/auth', authRoutes);
+
+app.use('/api/users', userRoutes);
 
 app.use('/api/listings', listingRoutes);
 
