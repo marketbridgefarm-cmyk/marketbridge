@@ -27,6 +27,8 @@ const { createResetToken, consumeResetToken } = require('../services/passwordRes
 const { sendMail } = require('../utils/mailer');
 const { normalizeEthiopianPhone } = require('../services/smsService');
 const { SUPPORTED_SMS_LANGUAGES } = require('../services/notificationCopy');
+const { avatarUrlFor } = require('../utils/avatarUrl');
+const { avatarUploadMiddleware, saveAvatar, removeAvatarObject } = require('../utils/avatar');
 
 const router = express.Router();
 
@@ -108,8 +110,9 @@ function signRefreshToken(user, sessionId) {
 }
 
 function sanitize(user) {
-  const { passwordHash, mfaSecret, mfaBackupCodes, ...rest } = user;
-  return rest;
+  // avatarKey is a private storage path: clients only ever see the public avatarUrl.
+  const { passwordHash, mfaSecret, mfaBackupCodes, avatarKey, ...rest } = user;
+  return { ...rest, avatarUrl: avatarUrlFor(user) };
 }
 
 // Short-lived, single-purpose token: proves "this device just supplied the
@@ -348,6 +351,37 @@ router.post('/refresh', authLimiter, requireTrustedOrigin, async (req, res) => {
 // Get current user
 router.get('/me', authenticate, async (req, res) => {
   res.json({ user: sanitize(req.user) });
+});
+
+// Profile photo: upload / replace. Multipart field "avatar". Cropped to a 512px square WebP; EXIF is stripped.
+router.post('/me/avatar', authenticate, avatarUploadMiddleware, async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'Choose a photo to upload.' });
+
+  let key;
+  try {
+    key = await saveAvatar(req.user.id, req.file);
+  } catch (error) {
+    const msg = String(error && error.message);
+    if (/do not match|Could not determine|exceed the configured|empty/i.test(msg)) {
+      return res.status(400).json({ error: 'That file is not a valid photo. Please choose another one.' });
+    }
+    req.log.error({ err: error }, 'Avatar upload failed');
+    const storageDown = /not configured|unavailable/i.test(msg);
+    return res.status(storageDown ? 503 : 500).json({ error: 'Photo upload is not available right now. You can add it later from your account.' });
+  }
+
+  const previousKey = req.user.avatarKey;
+  const updated = await prisma.user.update({ where: { id: req.user.id }, data: { avatarKey: key } });
+  if (previousKey) removeAvatarObject(previousKey);
+  return res.json({ user: sanitize(updated) });
+});
+
+// Profile photo: remove.
+router.delete('/me/avatar', authenticate, async (req, res) => {
+  const previousKey = req.user.avatarKey;
+  const updated = await prisma.user.update({ where: { id: req.user.id }, data: { avatarKey: null } });
+  if (previousKey) removeAvatarObject(previousKey);
+  return res.json({ user: sanitize(updated) });
 });
 
 // Notification/localization preferences.

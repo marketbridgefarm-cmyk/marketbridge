@@ -6,6 +6,7 @@ const { authenticate, optionalAuthenticate } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roleCheck');
 const { recordAuditEvent } = require('../utils/audit');
 const { signedMediaUrl } = require('../utils/objectStorage');
+const { withAvatarUrl } = require('../utils/avatarUrl');
 const { evidenceUpload, uploadEvidenceFiles } = require('../utils/evidenceUpload');
 const { validateListingReferences } = require('../utils/evidenceValidator');
 const { noContactInfo, findContactInfo } = require('../utils/contactGuard');
@@ -45,6 +46,8 @@ async function attachMediaUrls(listing, { includePrivateKeys = false, firstPhoto
 
   return {
     ...listing,
+    // Sellers carry a private avatarKey from the query; clients get the public avatarUrl instead.
+    ...(listing.seller ? { seller: withAvatarUrl(listing.seller) } : {}),
     photos: photos.filter(Boolean),
     videos: videos.filter(Boolean),
     ...(includePrivateKeys ? { photoKeys, videoKeys } : {}),
@@ -389,6 +392,7 @@ router.get('/', optionalAuthenticate, async (req, res) => {
       location: true,
       region: true,
       verificationStatus: true,
+      avatarKey: true,
     };
 
     const now = new Date();
@@ -787,6 +791,7 @@ router.get('/:id', optionalAuthenticate, async (req, res) => {
             location: true,
             region: true,
             verificationStatus: true,
+            avatarKey: true,
           },
         },
       },
