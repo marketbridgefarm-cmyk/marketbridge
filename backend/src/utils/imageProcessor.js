@@ -74,7 +74,10 @@ async function processImage(buffer, options = {}) {
 
   const pipeline = image
     .rotate() // apply EXIF orientation, then discard metadata
-    .resize({ width: maxWidth, height: maxHeight, fit: 'inside', withoutEnlargement: true });
+    .resize(options.fit === 'cover'
+      // Profile photos: fill the square, keeping the most interesting part (usually the face) in frame.
+      ? { width: maxWidth, height: maxHeight, fit: 'cover', position: options.position || 'attention', withoutEnlargement: true }
+      : { width: maxWidth, height: maxHeight, fit: 'inside', withoutEnlargement: true });
 
   const output = format === 'jpeg'
     // JPEG has no alpha channel: flatten transparent PNG/WebP onto white
@@ -101,10 +104,10 @@ function makeDerivedKey(key, suffix = 'optimized') {
   return `${base}-${suffix}-${crypto.randomUUID()}.webp`;
 }
 
-async function optimizeUpload({ buffer, mime, maxWidth, maxHeight, quality, format, imageOnly = true }) {
+async function optimizeUpload({ buffer, mime, maxWidth, maxHeight, quality, format, fit, position, imageOnly = true }) {
   if (!isImageMime(mime)) return { buffer, contentType: mime, extension: path.extname('file') || '', optimized: false };
   if (!hasValidImageSignature(buffer, mime)) throw new Error('Image file contents do not match the declared image type');
-  return { ...(await processImage(buffer, { maxWidth, maxHeight, quality, format })), optimized: true, imageOnly };
+  return { ...(await processImage(buffer, { maxWidth, maxHeight, quality, format, fit, position })), optimized: true, imageOnly };
 }
 
 module.exports = {
