@@ -1,3 +1,4 @@
+import AvatarFace from '../../components/AvatarFace.jsx';
 import React, { useEffect, useState } from 'react';
 
 import { initials } from './orderDetailUtils.js';
@@ -64,20 +65,21 @@ export function Section({ title, meta, strong, children }) {
   );
 }
 
-export const Avatar = ({ name, small }) => (
+export const Avatar = ({ name, small, src }) => (
   <span className={`od-party-avatar${small ? ' od-party-avatar--sm' : ''}`} aria-hidden="true">
     {initials(name)}
+    <AvatarFace src={src} />
   </span>
 );
 
-export function PartyBadge({ role, name }) {
+export function PartyBadge({ role, name, src }) {
   return (
     <div className="od-card-side-party">
       <div>
         <span className="od-card-side-label">{role}</span>
         <span className="od-card-side-value">{name || '—'}</span>
       </div>
-      <Avatar name={name} />
+      <Avatar name={name} src={src} />
     </div>
   );
 }

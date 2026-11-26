@@ -94,7 +94,7 @@ export default function OverviewCard({ order, title, flags, canCancel, busy, onC
       eyebrow={role}
       eyebrowClass={isSeller ? 'is-selling' : ''}
       title={title}
-      side={other?.name ? <PartyBadge role={partyRole} name={other.name} /> : <Avatar name={other?.name} />}
+      side={other?.name ? <PartyBadge role={partyRole} name={other.name} src={other.avatarUrl} /> : <Avatar name={other?.name} src={other?.avatarUrl} />}
     >
       <Section
         title="Order status"

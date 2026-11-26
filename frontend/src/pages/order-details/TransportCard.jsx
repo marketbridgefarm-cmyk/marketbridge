@@ -81,7 +81,7 @@ function QuoteRow({ quote, t, hasActiveNegotiation }) {
     <div className="transporter">
       <div>
         <div className="od-person">
-          <Avatar small name={ownerName} />
+          <Avatar small name={ownerName} src={quote.truckOwner?.avatarUrl} />
           <strong>{ownerName}</strong>
         </div>
         <p>
@@ -287,7 +287,7 @@ export default function TransportCard({ order, t }) {
             meta={
               <>
                 <strong>{job.truckOwner.name || '—'}</strong>
-                <Avatar name={job.truckOwner.name} />
+                <Avatar name={job.truckOwner.name} src={job.truckOwner.avatarUrl} />
               </>
             }
             strong

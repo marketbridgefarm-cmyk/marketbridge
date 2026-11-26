@@ -95,7 +95,7 @@ export default function InspectionCard({ order, title, i }) {
   const addenda = Array.isArray(report?.addenda) ? report.addenda : [];
 
   const side = inspectorName ? (
-    <PartyBadge role="Inspector" name={inspectorName} />
+    <PartyBadge role="Inspector" name={inspectorName} src={request.inspector?.avatarUrl} />
   ) : (
     <SideLabel name="Status">
       <Pill tone={statusTone(request.status)}>{label(request.status)}</Pill>
@@ -238,7 +238,7 @@ export default function InspectionCard({ order, title, i }) {
                     <div className="transporter" key={quote.id}>
                       <div>
                         <div className="od-person">
-                          <Avatar small name={quote.inspector?.name || 'Inspector'} />
+                          <Avatar small name={quote.inspector?.name || 'Inspector'} src={quote.inspector?.avatarUrl} />
                           <strong>{quote.inspector?.name || 'Inspector'}</strong>
                           <ReliabilityBadge reliability={quote.reliability || quote.inspector?.reliability} />
                           {quote.rank === 1 && isPending && quotes.filter((q) => q.status === 'PENDING').length > 1 && (

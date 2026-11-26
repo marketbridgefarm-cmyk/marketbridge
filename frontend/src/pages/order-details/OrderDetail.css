@@ -104,21 +104,12 @@
   --card-tone: var(--mb-accent);
 }
 
-/* NEW DARK OVERVIEW CARD BACKGROUND (CBE Bank Card style) */
-.order-detail-page .od-card-overview {
-  background: var(--surface-dark);
-  color: #ffffff;
-}
-
-.order-detail-page .od-card-overview .od-card-title,
-.order-detail-page .od-card-overview .od-eyebrow,
-.order-detail-page .od-card-overview .od-card-subtitle {
-  color: #ffffff;
-}
-
-.order-detail-page .od-card-overview .od-eyebrow {
-  color: #D4AF37; /* Gold accent */
-}
+/* Overview card (top of the order page).
+   This used to be a dark "bank card": dark background + white title + gold eyebrow. The background lost to
+   .order-detail-page .card (mb-cards.css, same specificity) depending on which stylesheet loaded last, while the
+   white title and gold eyebrow (3 classes) always won - so on phones the title was white on a light card and
+   unreadable. The page and every other card are light, so the overview card is light too and uses the normal
+   title / eyebrow colours (green eyebrow, dark title) like the Orders list card. */
 
 /* --------------------------------------------------------------------------
    Card head — same treatment as .order-card-head
