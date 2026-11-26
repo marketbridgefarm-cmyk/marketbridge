@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import AvatarFace from '../components/AvatarFace.jsx';
 
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -290,6 +291,7 @@ function OrderCard({ order, currentUserId }) {
 
           <div className={`order-avatar tone-${avatarTone}`} aria-hidden="true">
             {initialsOf(counterparty?.name)}
+            <AvatarFace src={counterparty?.avatarUrl} />
           </div>
         </div>
       </div>

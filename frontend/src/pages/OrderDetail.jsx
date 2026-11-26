@@ -1294,19 +1294,18 @@ export default function OrderDetail() {
 
   return (
     <main className="section order-detail-page">
+      <FilterFab
+        label="Jump to section"
+        choices={{
+          items: sectionChoices,
+          value: activeSection,
+          defaultValue: activeSection,
+          onChange: jumpToSection,
+        }}
+      />
       <div className="container-narrow">
         <div className="row-between page-bar">
           <button type="button" className="back-link" onClick={() => navigate(-1)}>← Back</button>
-          <FilterFab
-            mobileInline
-            label="Jump to section"
-            choices={{
-              items: sectionChoices,
-              value: activeSection,
-              defaultValue: activeSection,
-              onChange: jumpToSection,
-            }}
-          />
           <Button size="sm" disabled={refreshing} busy={refreshing} busyText="Refreshing…" onClick={reload}>Refresh</Button>
         </div>
 
@@ -1426,9 +1425,9 @@ export default function OrderDetail() {
             refunds={refunds}
             payouts={payouts}
             people={{
-              SELLER: { name: order.seller?.name || null, you: isSeller },
+              SELLER: { name: order.seller?.name || null, avatarUrl: order.seller?.avatarUrl, you: isSeller },
               INSPECTOR: { name: inspectorName, you: isInspector },
-              TRANSPORTER: { name: transportJob?.truckOwner?.name || null, you: isTransporter },
+              TRANSPORTER: { name: transportJob?.truckOwner?.name || null, avatarUrl: transportJob?.truckOwner?.avatarUrl, you: isTransporter },
             }}
             isAdmin={isAdmin}
             busy={busy}

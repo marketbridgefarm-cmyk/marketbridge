@@ -12,6 +12,7 @@ import { orderStatusChoices, matchesOrderStatus } from '../utils/orderStatusFilt
 import { InspectionRequestSummary, TransportRequestSummary } from '../components/RequestScopeSummary.jsx';
 import './dashboards/Dashboard.css';
 import './dashboards/RecordCard.css';
+import AvatarFace from '../components/AvatarFace.jsx';
 
 // ============================================================================
 // UNIFIED DASHBOARD
@@ -158,7 +159,7 @@ function StatTile({ label, value, accent }) {
 
 function RecordCard({
   eyebrow, selling, title,
-  partyRole, partyName, avatar, avatarTone,
+  partyRole, partyName, avatar, avatarUrl, avatarTone,
   blockTitle, blockNote, badges, steps,
   amount, footer, stack, highlight,
 }) {
@@ -173,7 +174,7 @@ function RecordCard({
             <span className="rc-party-role">{partyRole}</span>
             <span className="rc-party-name">{partyName}</span>
           </div>
-          <div className={`rc-avatar tone-${avatarTone}`} aria-hidden="true">{avatar}</div>
+          <div className={`rc-avatar tone-${avatarTone}`} aria-hidden="true">{avatar}<AvatarFace src={avatarUrl} /></div>
         </div>
         <h2 className="rc-title" title={title}>{title}</h2>
       </header>
@@ -243,6 +244,7 @@ function OrderCard({ o, footerText = 'View order', eyebrowOverride, blockTitle =
       partyRole={isSeller ? 'Buyer' : 'Seller'}
       partyName={counterparty?.name || 'Unknown party'}
       avatar={initialsOf(counterparty?.name, title)}
+      avatarUrl={counterparty?.avatarUrl}
       avatarTone={openDispute ? 'danger' : tone}
       blockTitle={blockTitle}
       blockNote={`ORD ${shortId(o.id)}`}
@@ -469,7 +471,7 @@ export default function Dashboard() {
     for (const o of ordersTagged) {
       const other = o.viewerRole === 'BUYER' ? o.seller : o.buyer;
       if (other && other.id !== user?.id && !map.has(other.id)) {
-        map.set(other.id, { id: other.id, name: other.name, lastOrderId: o.id });
+        map.set(other.id, { id: other.id, name: other.name, avatarUrl: other.avatarUrl, lastOrderId: o.id });
       }
       const truckOwnerId = o.transportJob?.truckOwnerId;
       if (truckOwnerId && truckOwnerId !== user?.id && !map.has(truckOwnerId)) {
@@ -711,6 +713,7 @@ export default function Dashboard() {
                       partyRole="Seller"
                       partyName={o.seller?.name || 'Unknown party'}
                       avatar={initialsOf(o.seller?.name, title)}
+                      avatarUrl={o.seller?.avatarUrl}
                       avatarTone={tone}
                       blockTitle="Offer status"
                       blockNote={`OFF ${shortId(o.id)}`}
@@ -971,6 +974,7 @@ export default function Dashboard() {
                       partyRole={isSeller ? 'Buyer' : 'Seller'}
                       partyName={counterparty?.name || 'Unknown party'}
                       avatar={initialsOf(counterparty?.name, title)}
+                      avatarUrl={counterparty?.avatarUrl}
                       avatarTone={isSeller ? 'success' : 'info'}
                       blockTitle="Offer status"
                       blockNote={`OFF ${shortId(o.id)}`}
@@ -1081,7 +1085,7 @@ export default function Dashboard() {
                         className={`conv-card${selectedCounterpart?.id === c.id ? ' conv-card--active' : ''}`}
                         onClick={() => openThread(c)}
                       >
-                        <span className="order-avatar tone-muted">{initialsOf(c.name, 'User')}</span>
+                        <span className="order-avatar tone-muted">{initialsOf(c.name, 'User')}<AvatarFace src={c.avatarUrl} /></span>
                         <span className="conv-card-text">
                           <span className="order-title">{c.name || 'User'}</span>
                           <span className="order-date">ORD {shortId(c.lastOrderId)}</span>

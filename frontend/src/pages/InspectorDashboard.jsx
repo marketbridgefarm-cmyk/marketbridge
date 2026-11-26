@@ -1,3 +1,4 @@
+import AvatarFace from '../components/AvatarFace.jsx';
 import React, { useCallback, useEffect, useState } from 'react';
 import AmountPicker from '../components/AmountPicker.jsx';
 import { Link, useSearchParams } from 'react-router-dom';
@@ -665,6 +666,7 @@ export default function InspectorDashboard() {
                             </div>
                             <div className="sd-avatar tone-success" aria-hidden="true">
                               {initialsOf(requesterName)}
+                              <AvatarFace src={r.requestedBy?.avatarUrl} />
                             </div>
                           </div>
                         </div>
@@ -955,6 +957,7 @@ export default function InspectorDashboard() {
                                 </div>
                                 <div className={`sd-avatar tone-${tone}`} aria-hidden="true">
                                   {initialsOf(requesterName)}
+                                  <AvatarFace src={r.requestedBy?.avatarUrl} />
                                 </div>
                               </div>
                             </div>
