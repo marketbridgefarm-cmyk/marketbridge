@@ -32,7 +32,7 @@ async function receivedOffers(req, res) {
           updatedAt: true,
           agreedOrder: { select: { id: true, status: true } },
           buyer: {
-            select: { id: true, name: true, rating: true, verificationStatus: true },
+            select: { id: true, name: true, avatarKey: true, rating: true, verificationStatus: true },
           },
           listing: {
             select: {

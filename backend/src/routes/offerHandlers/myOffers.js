@@ -35,6 +35,7 @@ async function myOffers(req, res) {
           createdAt: true,
           updatedAt: true,
           agreedOrder: { select: { id: true, status: true } },
+          seller: { select: { id: true, name: true, avatarKey: true, rating: true, verificationStatus: true } },
           listing: {
             select: {
               id: true,

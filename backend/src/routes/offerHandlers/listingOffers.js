@@ -40,7 +40,7 @@ async function listingOffers(req, res) {
             buyer: {
               select: {
                 id: true,
-                name: true,
+                name: true, avatarKey: true,
                 phone: true,
                 rating: true,
                 verificationStatus: true,
@@ -74,7 +74,7 @@ async function listingOffers(req, res) {
           buyer: {
             select: {
               id: true,
-              name: true,
+              name: true, avatarKey: true,
               rating: true,
               verificationStatus: true,
             },
