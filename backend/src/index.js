@@ -27,6 +27,7 @@ const {
 
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
+const { avatarUrlResponse } = require('./middleware/avatarUrls');
 const listingRoutes = require('./routes/listings');
 const offerRoutes = require('./routes/offers');
 const inspectionRoutes = require('./routes/inspections');
@@ -266,6 +267,9 @@ app.use(
 // (see routes/auth.js). Only auth.js reads req.cookies; no secret needed
 // since the cookie's own value is a signed JWT.
 app.use(cookieParser());
+
+// Profile photos: select `avatarKey` anywhere, clients receive `avatarUrl` (never the private key).
+app.use(avatarUrlResponse);
 
 // ============================================================================
 // HEALTH CHECK + METRICS
