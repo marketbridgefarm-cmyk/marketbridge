@@ -1,3 +1,4 @@
+import AvatarFace from './AvatarFace.jsx';
 import React from 'react';
 
 // ============================================================================
@@ -215,6 +216,7 @@ export default function RefundStatusCard({
                           {person.name && (
                             <span className="od-party-avatar od-party-avatar--sm" aria-hidden="true">
                               {initials(person.name)}
+                              <AvatarFace src={person.avatarUrl} />
                             </span>
                           )}
                           <span className="payout-party-role">

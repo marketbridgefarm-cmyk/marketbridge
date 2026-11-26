@@ -1,3 +1,4 @@
+import AvatarFace from './AvatarFace.jsx';
 import React, { useState } from 'react';
 import AmountPicker from './AmountPicker.jsx';
 import { Link } from 'react-router-dom';
@@ -108,7 +109,7 @@ function BidRow({ quote, type, onRespond, disabled }) {
 
       {/* ── Provider + price ────────────────────────────── */}
       <div className="bb-row-main">
-        <span className="bb-avatar" aria-hidden="true">{initialsOf(provider.name)}</span>
+        <span className="bb-avatar" aria-hidden="true">{initialsOf(provider.name)}<AvatarFace src={provider.avatarUrl} /></span>
 
         <div className="bb-row-body">
           <div className="bb-row-line">

@@ -1,0 +1,15 @@
+/* Containers that show a person: the photo fills the round/rounded badge and is clipped by it. */
+.order-avatar,
+.rc-avatar,
+.sd-avatar,
+.od-party-avatar,
+.bb-avatar { position: relative; overflow: hidden; }
+
+.mbaf {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+}
