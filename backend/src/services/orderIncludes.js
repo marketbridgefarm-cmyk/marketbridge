@@ -12,7 +12,7 @@
 
 const userSelect = {
   id: true,
-  name: true,
+  name: true, avatarKey: true,
   phone: true,
   location: true,
   rating: true,
@@ -25,12 +25,12 @@ const userSelect = {
 // obviously has their own, and admins need it for support — so it is added
 // back per-request in applySealedBidVisibility() for those three roles only.
 const transportInclude = {
-  loadingReport: { include: { submittedBy: { select: { id: true, name: true } } } },
-  truckOwner: { select: { id: true, name: true, rating: true, verificationStatus: true } },
+  loadingReport: { include: { submittedBy: { select: { id: true, name: true, avatarKey: true } } } },
+  truckOwner: { select: { id: true, name: true, avatarKey: true, rating: true, verificationStatus: true } },
   truck: { select: { id: true, registration: true, truckType: true, capacity: true, operatingArea: true, availability: true, verificationStatus: true, rating: true } },
   quotes: {
     include: {
-      truckOwner: { select: { id: true, name: true, rating: true, verificationStatus: true } },
+      truckOwner: { select: { id: true, name: true, avatarKey: true, rating: true, verificationStatus: true } },
       truck: { select: { id: true, registration: true, truckType: true, capacity: true, operatingArea: true, availability: true, verificationStatus: true, rating: true } },
       _count: { select: { childQuotes: true } },
     },
@@ -104,14 +104,14 @@ const orderDetailInclude = {
         include: {
           report: REPORT_INCLUDE,
           arrival: ARRIVAL_SELECT,
-          inspector: { select: { id: true, name: true, phone: true } },
+          inspector: { select: { id: true, name: true, avatarKey: true, phone: true } },
           payments: { select: { id: true, type: true, status: true, amount: true, method: true, reference: true } },
           quotes: {
             where: { status: { not: 'REJECTED' } },
             select: {
               id: true, inspectorId: true, amount: true, status: true, message: true,
               parentQuoteId: true, counterAmount: true, counteredBy: true, expiresAt: true, createdAt: true, updatedAt: true,
-              inspector: { select: { id: true, name: true, rating: true, location: true, verificationStatus: true } },
+              inspector: { select: { id: true, name: true, avatarKey: true, rating: true, location: true, verificationStatus: true } },
               _count: { select: { childQuotes: true } },
             },
             orderBy: { createdAt: 'asc' },
@@ -126,13 +126,13 @@ const orderDetailInclude = {
     include: {
       report: REPORT_INCLUDE,
       arrival: ARRIVAL_SELECT,
-      inspector: { select: { id: true, name: true, phone: true } },
+      inspector: { select: { id: true, name: true, avatarKey: true, phone: true } },
       payments: { select: { id: true, type: true, status: true, amount: true, method: true, reference: true } },
       quotes: {
         where: { status: { not: 'REJECTED' } },
         select: {
           id: true, inspectorId: true, amount: true, status: true, message: true, parentQuoteId: true, counterAmount: true, counteredBy: true, expiresAt: true, createdAt: true, updatedAt: true,
-          inspector: { select: { id: true, name: true, rating: true, location: true, verificationStatus: true } },
+          inspector: { select: { id: true, name: true, avatarKey: true, rating: true, location: true, verificationStatus: true } },
           _count: { select: { childQuotes: true } },
         },
         orderBy: { createdAt: 'asc' },
@@ -140,7 +140,7 @@ const orderDetailInclude = {
     },
   },
   agreedOffer: true,
-  priceReviews: { include: { proposedBy: { select: { id: true, name: true } } }, orderBy: { createdAt: 'asc' } },
+  priceReviews: { include: { proposedBy: { select: { id: true, name: true, avatarKey: true } } }, orderBy: { createdAt: 'asc' } },
   buyer: { select: userSelect },
   seller: { select: userSelect },
   transportJob: { include: { ...transportInclude, loadingReport: true } },
@@ -152,15 +152,15 @@ const orderDetailInclude = {
   paymentObligations: {
     include: {
       payment: { select: { id: true, status: true, amount: true, method: true, reference: true } },
-      payer: { select: { id: true, name: true } },
-      beneficiary: { select: { id: true, name: true } },
+      payer: { select: { id: true, name: true, avatarKey: true } },
+      beneficiary: { select: { id: true, name: true, avatarKey: true } },
     },
     orderBy: { createdAt: 'asc' },
   },
   events: {
     orderBy: { createdAt: 'asc' },
     take: 50,
-    include: { actor: { select: { id: true, name: true } } },
+    include: { actor: { select: { id: true, name: true, avatarKey: true } } },
   },
   disputes: true,
   ratings: true,
