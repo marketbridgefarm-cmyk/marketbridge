@@ -280,7 +280,7 @@ router.post(
             inspector: {
               select: {
                 id: true,
-                name: true,
+                name: true, avatarKey: true,
                 rating: true,
                 location: true,
                 verificationStatus: true,
@@ -342,7 +342,7 @@ router.get(
           inspector: {
             select: {
               id: true,
-              name: true,
+              name: true, avatarKey: true,
               rating: true,
               location: true,
               verificationStatus: true,
@@ -399,7 +399,7 @@ router.get(
               requestedById: true,
               inspectorId: true,
               listing: { select: { id: true, cropType: true, title: true, location: true } },
-              requestedBy: { select: { id: true, name: true } },
+              requestedBy: { select: { id: true, name: true, avatarKey: true } },
             },
           },
         },
@@ -547,7 +547,7 @@ router.patch(
           },
           include: {
             inspector: {
-              select: { id: true, name: true, rating: true, location: true },
+              select: { id: true, name: true, avatarKey: true, rating: true, location: true },
             },
           },
         });
@@ -694,7 +694,7 @@ router.post(
             expiresAt: quoteExpiry(12),
           },
           include: {
-            inspector: { select: { id: true, name: true, rating: true, location: true } },
+            inspector: { select: { id: true, name: true, avatarKey: true, rating: true, location: true } },
           },
         });
 

@@ -340,12 +340,12 @@ router.get(
           createdAt: true,
           order: {
             select: {
-              buyer: { select: { id: true, name: true } },
-              seller: { select: { id: true, name: true } },
+              buyer: { select: { id: true, name: true, avatarKey: true } },
+              seller: { select: { id: true, name: true, avatarKey: true } },
             },
           },
           truckOwner: {
-            select: { id: true, name: true, rating: true },
+            select: { id: true, name: true, avatarKey: true, rating: true },
           },
           truck: {
             select: { id: true, registration: true, truckType: true, capacity: true },
@@ -398,8 +398,8 @@ router.get(
                 where: { status: { not: 'CANCELLED' } },
                 select: { id: true, status: true, fee: true, payments: { select: { type: true, status: true } } },
               },
-              buyer: { select: { id: true, name: true } },
-              seller: { select: { id: true, name: true } },
+              buyer: { select: { id: true, name: true, avatarKey: true } },
+              seller: { select: { id: true, name: true, avatarKey: true } },
             },
           },
           truck: true,
@@ -452,8 +452,8 @@ router.get(
             include: {
               order: {
                 include: {
-                  buyer: { select: { id: true, name: true } },
-                  seller: { select: { id: true, name: true } },
+                  buyer: { select: { id: true, name: true, avatarKey: true } },
+                  seller: { select: { id: true, name: true, avatarKey: true } },
                 },
               },
             },
@@ -778,11 +778,11 @@ router.get(
         include: {
           transportJob: {
             include: {
-              truckOwner: { select: { id: true, name: true, rating: true } },
+              truckOwner: { select: { id: true, name: true, avatarKey: true, rating: true } },
               truck: true,
               quotes: {
                 include: {
-                  truckOwner: { select: { id: true, name: true, rating: true } },
+                  truckOwner: { select: { id: true, name: true, avatarKey: true, rating: true } },
                   truck: true,
                 },
                 orderBy: { amount: 'asc' },
@@ -1503,7 +1503,7 @@ router.get(
 
       const report = await prisma.transportLoadingReport.findUnique({
         where: { transportJobId: job.id },
-        include: { submittedBy: { select: { id: true, name: true } } },
+        include: { submittedBy: { select: { id: true, name: true, avatarKey: true } } },
       });
 
       if (!report) return res.json({ loadingReport: null, evidence: null });

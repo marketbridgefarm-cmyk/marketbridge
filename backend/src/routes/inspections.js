@@ -238,7 +238,7 @@ router.post(
               },
             },
             inspector: {
-              select: { id: true, name: true, rating: true, location: true },
+              select: { id: true, name: true, avatarKey: true, rating: true, location: true },
             },
           },
         });
@@ -410,7 +410,7 @@ router.get('/inspectors', authenticate, async (req, res) => {
       },
       select: {
         id: true,
-        name: true,
+        name: true, avatarKey: true,
         rating: true,
         location: true,
         verificationStatus: true,
@@ -455,10 +455,10 @@ router.get(
             select: { id: true, cropType: true, title: true, quantity: true, unit: true, location: true, category: true },
           },
           requestedBy: {
-            select: { id: true, name: true, rating: true },
+            select: { id: true, name: true, avatarKey: true, rating: true },
           },
           inspector: {
-            select: { id: true, name: true, rating: true },
+            select: { id: true, name: true, avatarKey: true, rating: true },
           },
           quotes: {
             where: {
@@ -505,8 +505,8 @@ router.get('/seller-pending', authenticate, requireRole('SELLER'), async (req, r
       where: { listing: { sellerId: req.user.id }, status: { in: ['ACCEPTED', 'IN_PROGRESS', 'STALLED', 'COMPLETED'] } },
       include: {
         listing: { select: { id: true, title: true, cropType: true, location: true } },
-        requestedBy: { select: { id: true, name: true } },
-        inspector: { select: { id: true, name: true } },
+        requestedBy: { select: { id: true, name: true, avatarKey: true } },
+        inspector: { select: { id: true, name: true, avatarKey: true } },
         quotes: { where: { status: { not: 'REJECTED' } }, select: { id: true, inspectorId: true, amount: true, status: true, message: true }, orderBy: { createdAt: 'asc' } },
       },
       orderBy: { updatedAt: 'desc' },
@@ -860,8 +860,8 @@ router.post(
               location: true, category: true,
             },
           },
-          requestedBy: { select: { id: true, name: true } },
-          inspector: { select: { id: true, name: true, rating: true, location: true } },
+          requestedBy: { select: { id: true, name: true, avatarKey: true } },
+          inspector: { select: { id: true, name: true, avatarKey: true, rating: true, location: true } },
           report: true,
         },
       });
@@ -904,7 +904,7 @@ router.get(
               orders: { select: { id: true, status: true }, orderBy: { createdAt: 'desc' }, take: 1 },
             },
           },
-          requestedBy: { select: { id: true, name: true, rating: true } },
+          requestedBy: { select: { id: true, name: true, avatarKey: true, rating: true } },
           report: true,
           payments: { select: { id: true, type: true, status: true, amount: true } },
           quotes: {

@@ -355,7 +355,7 @@ router.get(
       const quotes = await prisma.transportQuote.findMany({
         where: { transportJobId: job.id },
         include: {
-          truckOwner: { select: { id: true, name: true, rating: true } },
+          truckOwner: { select: { id: true, name: true, avatarKey: true, rating: true } },
           truck: true,
         },
         orderBy: { amount: 'asc' },
@@ -880,7 +880,7 @@ router.post(
             expiresAt: quoteExpiry(12),
           },
           include: {
-            truckOwner: { select: { id: true, name: true, rating: true } },
+            truckOwner: { select: { id: true, name: true, avatarKey: true, rating: true } },
             truck: true,
           },
         });
